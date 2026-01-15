@@ -1,0 +1,6 @@
+# ignore secrets (DO NOT COMMIT)
+.streamlit/service_account.json
+.streamlit/secrets.toml
+
+# mac
+.DS_Store
