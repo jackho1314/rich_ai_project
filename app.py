@@ -24,6 +24,9 @@ except Exception:
 # 1) Page Config
 # =========================
 st.set_page_config(page_title="2026 AI 財富診斷", page_icon="🤖", layout="centered")
+APP_VERSION = "deploy-check-001"
+st.sidebar.caption(f"APP_VERSION: {APP_VERSION}")
+
 
 
 # =========================
@@ -67,170 +70,397 @@ MODE = str(get_qp("mode", "A")).strip()
 
 
 # =========================
-# 2) CSS（只注入一次，避免重覆插入）
+# 2) ✅ CSS（每次 rerun 都注入，避免按開始測驗後 CSS 消失導致跑版）
 # =========================
-if "css_loaded" not in st.session_state:
-    st.session_state.css_loaded = True
-    st.markdown(
-        """
-        <style>
-        :root{
-          --bg0:#0B0B10;
-          --bg2:#1B1B28;
-          --gold:#FFD700;
-          --muted:#B8B8C6;
-          --accent:#D3544E;
-          --accent2:#FF4B4B;
-          --font: 'Microsoft JhengHei', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-        }
+CSS_VERSION = "2026-01-16-08"
 
-        .stApp{
-          background:
-            radial-gradient(1200px 600px at 70% 15%, rgba(255,215,0,0.10), transparent 60%),
-            radial-gradient(900px 500px at 20% 30%, rgba(255,75,75,0.10), transparent 60%),
-            linear-gradient(135deg, var(--bg0), var(--bg2));
-        }
-        *{ font-family: var(--font) !important; }
-        h1,h2,h3,p,div,span,label{ color:#fff !important; }
-        .muted{ color: var(--muted) !important; }
+st.markdown(
+    f"""
+    <style>
+    /* CSS_VERSION:{CSS_VERSION} */
+    :root{{
+      --bg0:#0B0B10;
+      --bg2:#1B1B28;
+      --gold:#FFD700;
+      --muted:#B8B8C6;
+      --accent:#D3544E;
+      --accent2:#FF4B4B;
+      --font: 'Microsoft JhengHei', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
 
-        [data-testid="stSidebar"]{
-          background:
-            radial-gradient(900px 500px at 30% 20%, rgba(255,215,0,0.08), transparent 60%),
-            linear-gradient(180deg, #0E0E15, #0B0B10);
-          border-right: 1px solid rgba(255,255,255,0.06);
-        }
+      /* ✅ 全站字級（手機/電腦都放大） */
+      --fs-root: clamp(18px, 0.55vw + 16px, 22px);
+      --fs-caption: clamp(14px, 0.25vw + 12px, 16px);
 
-        /* --- Partner Card (mobile friendly) --- */
-        .partner-card{
-          display:flex; align-items:center; gap:12px;
-          padding:12px 14px;
-          border-radius:18px;
-          border:1px solid rgba(255,255,255,0.10);
-          background: rgba(255,255,255,0.05);
-          box-shadow: 0 10px 25px rgba(0,0,0,0.22);
-          margin: 6px 0 12px 0;
-        }
-        .partner-img{
-          width:56px; height:56px; border-radius:16px;
-          object-fit:cover;
-          border:1px solid rgba(255,215,0,0.25);
-          flex: 0 0 auto;
-        }
-        .partner-meta{ line-height:1.15; }
-        .partner-kicker{
-          font-size:12px; color:rgba(255,255,255,0.72) !important;
-          letter-spacing:0.3px;
-        }
-        .partner-name{
-          font-size: clamp(18px, 2.2vw, 24px);
-          font-weight: 900;
-          margin-top:2px;
-        }
-        .partner-title{
-          font-size: clamp(13px, 1.6vw, 16px);
-          color: rgba(255,255,255,0.78) !important;
-          margin-top:2px;
-        }
-        .partner-ref{
-          margin-top:4px;
-          font-size:12px;
-          color: rgba(255,255,255,0.65) !important;
-        }
+      /* ✅ 控制表單深色底（不透明，避免白底穿透） */
+      --form-bg: #141423;
+      --form-bg-2: #0E0E15;
+      --form-border: rgba(255,255,255,0.16);
+    }}
 
-        /* --- Hero text sizes --- */
-        .hero-title{
-          font-size: clamp(26px, 3.2vw, 40px);
-          font-weight: 1000;
-          margin: 6px 0 2px 0;
-          letter-spacing: 0.2px;
-        }
-        .hero-subtitle{
-          font-size: clamp(14px, 1.7vw, 18px);
-          color: rgba(255,255,255,0.78) !important;
-          margin: 0 0 8px 0;
-        }
-        .quiz-step{
-          font-size: clamp(18px, 2.1vw, 24px);
-          font-weight: 900;
-          margin-top: 4px;
-        }
-        .quiz-question{
-          font-size: clamp(20px, 2.5vw, 30px);
-          font-weight: 1000;
-          margin: 6px 0 10px 0;
-        }
+    html{{ font-size: var(--fs-root) !important; }}
+    body, .stApp{{ font-size: 1rem !important; }}
+    *{{ font-family: var(--font) !important; }}
 
-        /* inputs */
-        [data-baseweb="input"] input,
-        [data-baseweb="textarea"] textarea{
-          background: rgba(255,255,255,0.06) !important;
-          border: 1px solid rgba(255,255,255,0.10) !important;
-          color:#fff !important;
-          border-radius: 14px !important;
-          font-size: 16px !important;
-        }
-        [data-baseweb="select"] > div{
-          background: rgba(255,255,255,0.06) !important;
-          border: 1px solid rgba(255,255,255,0.10) !important;
-          border-radius: 14px !important;
-        }
-        [data-baseweb="select"] *{ color:#fff !important; }
+    .stApp{{
+      background:
+        radial-gradient(1200px 600px at 70% 15%, rgba(255,215,0,0.10), transparent 60%),
+        radial-gradient(900px 500px at 20% 30%, rgba(255,75,75,0.10), transparent 60%),
+        linear-gradient(135deg, var(--bg0), var(--bg2));
+    }}
+    h1,h2,h3,p,div,span,label{{ color:#fff !important; }}
+    p, li{{ line-height: 1.55 !important; }}
+    .muted{{ color: var(--muted) !important; }}
 
-        /* progress */
-        .stProgress > div > div > div > div{
-          background: linear-gradient(90deg, var(--accent), var(--accent2));
-        }
+    [data-testid="stCaptionContainer"] *{{
+      font-size: var(--fs-caption) !important;
+      color: rgba(255,255,255,0.72) !important;
+    }}
 
-        /* buttons */
-        div.stButton > button{
-          background: linear-gradient(135deg, var(--accent), var(--accent2)) !important;
-          color:#fff !important;
-          border-radius: 14px;
-          width: 100%;
-          border: none;
-          padding: 0.92rem 1rem;
-          box-shadow: 0 14px 35px rgba(255,75,75,0.22);
-          transition: 0.16s;
-          font-size: 16px !important;
-          font-weight: 900 !important;
-        }
-        div.stButton > button:hover{
-          transform: translateY(-1px) scale(1.01);
-          box-shadow: 0 18px 46px rgba(255,75,75,0.32);
-        }
+    [data-testid="stSidebar"]{{
+      background:
+        radial-gradient(900px 500px at 30% 20%, rgba(255,215,0,0.08), transparent 60%),
+        linear-gradient(180deg, #0E0E15, #0B0B10);
+      border-right: 1px solid rgba(255,255,255,0.06);
+    }}
 
-        /* radio option */
-        div[role="radiogroup"] > label{
-          background: rgba(255,255,255,0.04);
-          border: 1px solid rgba(255,255,255,0.10);
-          padding: 12px 14px;
-          border-radius: 16px;
-          margin: 10px 0;
-        }
-        div[role="radiogroup"] > label:hover{
-          border-color: rgba(255,215,0,0.35);
-          background: rgba(255,215,0,0.06);
-        }
-        div[role="radiogroup"] p,
-        div[role="radiogroup"] span{
-          font-size: clamp(16px, 1.9vw, 20px) !important;
-          font-weight: 800 !important;
-          line-height: 1.25 !important;
-        }
+    /* =========================
+       ✅ 主頁 Partner Card（手機友善）
+    ========================= */
+    .partner-card{{
+      position: relative;
+      overflow: hidden;
+      display:flex !important;
+      flex-direction: row !important;
+      align-items:center !important;
+      gap:12px !important;
+      padding:12px 14px;
+      border-radius:18px;
+      border:1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.05);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.22);
+      margin: 6px 0 12px 0;
+    }}
+    .partner-img{{
+      width:56px !important;
+      height:56px !important;
+      max-width:56px !important;
+      max-height:56px !important;
+      border-radius:16px !important;
+      object-fit:cover !important;
+      border:1px solid rgba(255,215,0,0.25);
+      flex: 0 0 auto;
+      position: relative;
+      z-index: 1;
+    }}
+    .partner-meta{{
+      line-height:1.15;
+      position: relative;
+      z-index: 2;
+    }}
+    .partner-kicker{{
+      font-size: 0.85rem;
+      color:rgba(255,255,255,0.72) !important;
+      letter-spacing:0.3px;
+    }}
+    .partner-name{{
+      font-size: 1.25rem;
+      font-weight: 1000;
+      margin-top:2px;
+      text-shadow: 0 10px 26px rgba(0,0,0,0.20);
+    }}
+    .partner-title{{
+      font-size: 0.98rem;
+      color: rgba(255,255,255,0.78) !important;
+      margin-top:2px;
+    }}
+    .partner-ref{{
+      margin-top:4px;
+      font-size: 0.82rem;
+      color: rgba(255,255,255,0.65) !important;
+    }}
 
-        /* code */
-        pre, code{
-          background: rgba(255,255,255,0.06) !important;
-          color: #EEE !important;
-          border: 1px solid rgba(255,255,255,0.10) !important;
-          border-radius: 14px !important;
-          font-size: 16px !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    /* =========================
+       ✅ Sidebar 海報式顧問卡
+    ========================= */
+    .sb-card{{
+      position: relative;
+      overflow: hidden;
+      padding: 16px 14px;
+      border-radius: 22px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.05);
+      box-shadow: 0 14px 35px rgba(0,0,0,0.28);
+      margin-top: 10px;
+    }}
+    .sb-img{{
+      width: 100%;
+      max-width: 180px !important;
+      border-radius: 18px;
+      object-fit: cover;
+      border: 1px solid rgba(255,215,0,0.22);
+      display: block;
+      margin: 0 auto 12px auto;
+      position: relative;
+      z-index: 1;
+    }}
+    .sb-kicker{{
+      font-size: 0.95rem;
+      color: rgba(255,255,255,0.74) !important;
+      letter-spacing: 0.5px;
+    }}
+    .sb-name{{
+      font-size: clamp(26px, 1.4vw + 18px, 38px);
+      font-weight: 1000;
+      line-height: 1.12;
+      margin-top: 4px;
+    }}
+    .sb-title{{
+      font-size: clamp(16px, 0.6vw + 14px, 20px);
+      color: rgba(255,255,255,0.82) !important;
+      margin-top: 6px;
+    }}
+    .sb-ref{{
+      margin-top: 10px;
+      font-size: 0.9rem;
+      color: rgba(255,255,255,0.62) !important;
+    }}
+
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] span,
+    [data-testid="stSidebar"] label{{
+      font-size: 1rem !important;
+    }}
+
+    /* =========================
+       ✅ Hero / Quiz 字級放大
+    ========================= */
+    .hero-title{{
+      font-size: clamp(32px, 2.6vw, 54px);
+      font-weight: 1000;
+      margin: 6px 0 2px 0;
+      letter-spacing: 0.2px;
+    }}
+    .hero-subtitle{{
+      font-size: clamp(16px, 1.2vw, 22px);
+      color: rgba(255,255,255,0.78) !important;
+      margin: 0 0 8px 0;
+    }}
+    .quiz-step{{
+      font-size: clamp(20px, 1.6vw, 28px);
+      font-weight: 1000;
+      margin-top: 4px;
+    }}
+    .quiz-question{{
+      font-size: clamp(22px, 2.0vw, 34px);
+      font-weight: 1000;
+      margin: 6px 0 10px 0;
+    }}
+
+    /* =========================
+       ✅ Inputs / Select（白底白字必殺）
+    ========================= */
+    html, body, .stApp{{ color-scheme: dark !important; }}
+
+    [data-testid="stTextInput"],
+    [data-testid="stTextArea"],
+    [data-testid="stSelectbox"] {{
+      background: transparent !important;
+    }}
+
+    .stApp input,
+    .stApp textarea {{
+      background-color: var(--form-bg) !important;
+      color: #fff !important;
+      -webkit-text-fill-color: #fff !important;
+      caret-color: #fff !important;
+      border: 1px solid var(--form-border) !important;
+      border-radius: 14px !important;
+      outline: none !important;
+    }}
+
+    .stApp div[data-baseweb="select"] > div {{
+      background-color: var(--form-bg) !important;
+      border: 1px solid var(--form-border) !important;
+      border-radius: 14px !important;
+    }}
+    .stApp div[data-baseweb="select"] * {{
+      color: #fff !important;
+      -webkit-text-fill-color: #fff !important;
+    }}
+
+    .stApp div[data-baseweb="input"] > div,
+    .stApp div[data-baseweb="textarea"] > div {{
+      background-color: var(--form-bg) !important;
+      border: 1px solid var(--form-border) !important;
+      border-radius: 14px !important;
+    }}
+    .stApp div[data-baseweb="input"] div,
+    .stApp div[data-baseweb="textarea"] div {{
+      background-color: var(--form-bg) !important;
+    }}
+
+    .stApp input::placeholder,
+    .stApp textarea::placeholder {{
+      color: rgba(255,255,255,0.55) !important;
+      -webkit-text-fill-color: rgba(255,255,255,0.55) !important;
+    }}
+
+    .stApp input:-webkit-autofill,
+    .stApp input:-webkit-autofill:hover,
+    .stApp input:-webkit-autofill:focus,
+    .stApp textarea:-webkit-autofill,
+    .stApp textarea:-webkit-autofill:hover,
+    .stApp textarea:-webkit-autofill:focus {{
+      -webkit-text-fill-color: #fff !important;
+      caret-color: #fff !important;
+      box-shadow: 0 0 0 1000px var(--form-bg) inset !important;
+      -webkit-box-shadow: 0 0 0 1000px var(--form-bg) inset !important;
+      transition: background-color 9999s ease-out 0s;
+    }}
+
+    .stApp input:-moz-autofill,
+    .stApp textarea:-moz-autofill {{
+      box-shadow: 0 0 0 1000px var(--form-bg) inset !important;
+      -moz-text-fill-color: #fff !important;
+    }}
+
+    .stApp [role="listbox"] {{
+      background-color: var(--form-bg-2) !important;
+      border: 1px solid rgba(255,255,255,0.12) !important;
+    }}
+    .stApp [role="option"] {{
+      color: #fff !important;
+    }}
+
+    /* progress */
+    .stProgress > div > div > div > div{{
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+    }}
+
+    /* buttons */
+    div.stButton > button{{
+      background: linear-gradient(135deg, var(--accent), var(--accent2)) !important;
+      color:#fff !important;
+      border-radius: 14px;
+      width: 100%;
+      border: none;
+      padding: 1.05rem 1.05rem;
+      box-shadow: 0 14px 35px rgba(255,75,75,0.22);
+      transition: 0.16s;
+      font-size: 1.05rem !important;
+      font-weight: 1000 !important;
+    }}
+    div.stButton > button:hover{{
+      transform: translateY(-1px) scale(1.01);
+      box-shadow: 0 18px 46px rgba(255,75,75,0.32);
+    }}
+
+    /* =========================
+       ✅ st.link_button 永遠可見（不需點擊才變色）
+    ========================= */
+    [data-testid="stLinkButton"] a{{
+      display:flex !important;
+      align-items:center !important;
+      justify-content:center !important;
+      gap:10px !important;
+
+      width:100% !important;
+      text-decoration:none !important;
+
+      background: linear-gradient(135deg, var(--accent), var(--accent2)) !important;
+      color:#fff !important;
+
+      border-radius:14px !important;
+      padding: 1.05rem 1.05rem !important;
+      border: none !important;
+
+      font-size: 1.05rem !important;
+      font-weight: 1000 !important;
+
+      box-shadow: 0 14px 35px rgba(255,75,75,0.22) !important;
+      transition: 0.16s !important;
+    }}
+    [data-testid="stLinkButton"] a *{{
+      color:#fff !important;
+      -webkit-text-fill-color:#fff !important;
+      fill:#fff !important;
+    }}
+    [data-testid="stLinkButton"] a:hover{{
+      transform: translateY(-1px) scale(1.01);
+      box-shadow: 0 18px 46px rgba(255,75,75,0.32) !important;
+    }}
+
+    /* 若部分版本 link_button 內部是 button，補一層保險 */
+    [data-testid="stLinkButton"] button{{
+      background: linear-gradient(135deg, var(--accent), var(--accent2)) !important;
+      color:#fff !important;
+      border:none !important;
+    }}
+
+    /* radio option */
+    div[role="radiogroup"] > label{{
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.10);
+      padding: 14px 16px;
+      border-radius: 16px;
+      margin: 10px 0;
+    }}
+    div[role="radiogroup"] > label:hover{{
+      border-color: rgba(255,215,0,0.35);
+      background: rgba(255,215,0,0.06);
+    }}
+    div[role="radiogroup"] p,
+    div[role="radiogroup"] span{{
+      font-size: 1.05rem !important;
+      font-weight: 900 !important;
+      line-height: 1.28 !important;
+    }}
+
+    /* code */
+    pre, code{{
+      background: rgba(255,255,255,0.06) !important;
+      color: #EEE !important;
+      border: 1px solid rgba(255,255,255,0.10) !important;
+      border-radius: 14px !important;
+      font-size: 0.98rem !important;
+    }}
+
+    /* =========================
+       ✅ 名字金色漸層
+    ========================= */
+    .gold-gradient{{
+      background: linear-gradient(90deg, #FFF2B8 0%, #FFD700 35%, #FFB84D 70%, #FFE9A6 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent !important;
+      text-shadow: 0 10px 28px rgba(255, 215, 0, 0.16);
+    }}
+
+    /* =========================
+       ✅ 右上角徽章（永遠最上層）
+    ========================= */
+    .card-badge{{
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: clamp(22px, 0.9vw + 14px, 32px) !important;
+      height: auto;
+      opacity: 0.98;
+      filter: drop-shadow(0 10px 22px rgba(255,215,0,0.18));
+      pointer-events: none;
+      z-index: 9999 !important;
+    }}
+
+    @media (max-width: 768px){{
+      :root{{ --fs-root: 19px; }}
+      .card-badge{{ width: 36px !important; }}
+      div.stButton > button{{ padding: 1.1rem 1.05rem; }}
+      [data-testid="stLinkButton"] a{{ padding: 1.1rem 1.05rem !important; }}
+    }}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # =========================
@@ -296,6 +526,7 @@ def gsheets_self_check():
     st.sidebar.write("📌 spreadsheet：", spreadsheet if spreadsheet else "❌ 未填")
     st.sidebar.write("📌 type：", str(cfg.get("type", "")) if cfg else "❌")
     st.sidebar.write("📌 service_account_file：", sa_file if sa_file else "（未使用檔案模式）")
+    st.sidebar.caption(f"🎛️ CSS_VERSION: {CSS_VERSION}")
 
     if sa_file:
         p = Path(sa_file)
@@ -327,6 +558,7 @@ REQUIRED_PARTNER_COLS = {
 
 
 def drive_img(url: str) -> str:
+    """把 Drive 分享連結轉成可直接顯示的圖片連結（更穩）"""
     if not url or pd.isna(url):
         return ""
     s = str(url).strip()
@@ -343,6 +575,19 @@ def drive_img(url: str) -> str:
         except Exception:
             return s
     return s
+
+
+@st.cache_data(ttl=300)
+def url_ok(url: str) -> bool:
+    """快速檢查圖片 URL 是否可讀（避免載不到導致版面炸裂）"""
+    if not url:
+        return False
+    try:
+        r = requests.head(url, timeout=3, allow_redirects=True)
+        ct = (r.headers.get("Content-Type") or "").lower()
+        return (200 <= r.status_code < 400) and ("image" in ct)
+    except Exception:
+        return False
 
 
 def load_all_partners():
@@ -363,10 +608,8 @@ def load_all_partners():
         st.code(", ".join(sorted(missing)))
         st.stop()
 
-    # ✅ ref 統一化（避免找不到）
     df_all["ref"] = df_all["ref"].astype(str).map(norm_ref)
 
-    # ✅ line_search_id / line_id / line_token 也順便清理空白
     for col in ["line_search_id", "line_id", "line_token"]:
         df_all[col] = df_all[col].astype(str).str.strip()
 
@@ -394,39 +637,64 @@ except Exception as e:
 
 ref = norm_ref(get_qp("ref", "master"))
 partner = pick_partner(df_all, ref)
+
 p_img = drive_img(partner.get("img_url", ""))
+p_img = p_img if url_ok(p_img) else ""
+
+BADGE_URL = "https://lh3.googleusercontent.com/d/1Dz9q_hoxG4BN9YOHymw7JjqJaq5kEFGf"
 
 
 # =========================
-# 7) Sidebar（桌機用）
+# 7) Sidebar（海報式顧問卡 + 徽章）
 # =========================
 st.sidebar.write("---")
-if p_img:
-    st.sidebar.image(p_img, width=160)
-st.sidebar.markdown(f"### 專屬顧問：**{partner.get('name','')}**")
-st.sidebar.caption(f"🎖️ {partner.get('title','')}")
-if DEBUG:
-    st.sidebar.caption(f"ref：{partner.get('ref','')}")
+
+sb_name = str(partner.get("name", "")).strip()
+sb_title = str(partner.get("title", "")).strip()
+sb_ref = str(partner.get("ref", "")).strip()
+
+img_html = f'<img class="sb-img" src="{p_img}" alt="partner" />' if p_img else ""
+ref_html = f'<div class="sb-ref">ref：{sb_ref}</div>' if DEBUG and sb_ref else ""
+
+st.sidebar.markdown(
+    f"""
+    <div class="sb-card">
+      <img class="card-badge" src="{BADGE_URL}" alt="badge" />
+      {img_html}
+      <div class="sb-kicker">你的專屬顧問</div>
+      <div class="sb-name gold-gradient">{sb_name}</div>
+      <div class="sb-title">🎖️ {sb_title}</div>
+      {ref_html}
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 
 # =========================
-# 7.5) ✅ 主要頁面顧問卡（手機也看得到）
+# 7.5) ✅ 主要頁面顧問卡（安全版）＋徽章
 # =========================
 def show_partner_card():
     name = str(partner.get("name", "")).strip()
     title = str(partner.get("title", "")).strip()
+
     img = str(p_img or "").strip()
+    has_img = bool(img)
 
     ref_text = str(partner.get("ref", "")).strip()
     ref_html = f'<div class="partner-ref">ref：{ref_text}</div>' if DEBUG and ref_text else ""
 
-    if img:
+    badge_html = f'<img class="card-badge" src="{BADGE_URL}" alt="badge" />' if BADGE_URL else ""
+
+    if has_img:
         html = f"""
         <div class="partner-card">
-          <img class="partner-img" src="{img}" alt="partner" />
+          {badge_html}
+          <img class="partner-img" src="{img}" alt="partner" loading="lazy"
+               style="width:56px;height:56px;max-width:56px;max-height:56px;object-fit:cover;border-radius:16px;" />
           <div class="partner-meta">
             <div class="partner-kicker">你的專屬顧問</div>
-            <div class="partner-name">{name}</div>
+            <div class="partner-name gold-gradient">{name}</div>
             <div class="partner-title">🎖️ {title}</div>
             {ref_html}
           </div>
@@ -435,9 +703,10 @@ def show_partner_card():
     else:
         html = f"""
         <div class="partner-card">
+          {badge_html}
           <div class="partner-meta">
             <div class="partner-kicker">你的專屬顧問</div>
-            <div class="partner-name">{name}</div>
+            <div class="partner-name gold-gradient">{name}</div>
             <div class="partner-title">🎖️ {title}</div>
             {ref_html}
           </div>
@@ -484,7 +753,7 @@ COPY = {
 
 
 # =========================
-# 9) Header / Progress（改成 function，讓顧問卡可以放在標題上方）
+# 9) Header / Progress
 # =========================
 def progress_value():
     if st.session_state.page == "intro":
@@ -686,7 +955,6 @@ def page_result():
     st.code(CTA_KEYWORD, language=None)
     st.caption("（下方可一鍵複製到剪貼簿）")
 
-    # ✅ 一鍵複製（iframe 隔離，避免 removeChild）
     kw_js = json.dumps(CTA_KEYWORD, ensure_ascii=False)
     components.html(
         f"""
@@ -720,7 +988,6 @@ def page_result():
         height=90,
     )
 
-    # leads + LINE 通知（只做一次）
     if not st.session_state.notified:
         try:
             write_lead_and_notify(primary, secondary, persona_name, counts, CTA_KEYWORD)
@@ -730,7 +997,6 @@ def page_result():
             if DEBUG:
                 st.exception(e)
 
-    # LINE 按鈕（原生）
     line_sid = str(partner.get("line_search_id", "")).strip()
     if not line_sid:
         line_sid = str(st.secrets.get("MASTER_LINE_ADD", "")).strip()
