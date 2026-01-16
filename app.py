@@ -69,7 +69,7 @@ MODE = str(get_qp("mode", "A")).strip()
 
 
 # =========================
-# 2) ✅ CSS（每次 rerun 都注入，避免按開始測驗後 CSS 消失導致跑版）
+# 2) CSS（每次 rerun 都注入，避免按開始測驗後 CSS 消失導致跑版）
 # =========================
 CSS_VERSION = "2026-01-16-08"
 
@@ -86,11 +86,11 @@ st.markdown(
       --accent2:#FF4B4B;
       --font: 'Microsoft JhengHei', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
 
-      /* ✅ 全站字級（手機/電腦都放大） */
+      /* 全站字級（手機/電腦都放大） */
       --fs-root: clamp(18px, 0.55vw + 16px, 22px);
       --fs-caption: clamp(14px, 0.25vw + 12px, 16px);
 
-      /* ✅ 控制表單深色底（不透明，避免白底穿透） */
+      /* 控制表單深色底（不透明，避免白底穿透） */
       --form-bg: #141423;
       --form-bg-2: #0E0E15;
       --form-border: rgba(255,255,255,0.16);
@@ -123,7 +123,7 @@ st.markdown(
     }}
 
     /* =========================
-       ✅ 主頁 Partner Card（手機友善）
+       主頁 Partner Card（手機友善）
     ========================= */
     .partner-card{{
       position: relative;
@@ -179,7 +179,7 @@ st.markdown(
     }}
 
     /* =========================
-       ✅ Sidebar 海報式顧問卡
+       Sidebar 海報式顧問卡
     ========================= */
     .sb-card{{
       position: relative;
@@ -231,7 +231,7 @@ st.markdown(
     }}
 
     /* =========================
-       ✅ Hero / Quiz 字級放大
+       Hero / Quiz 字級放大
     ========================= */
     .hero-title{{
       font-size: clamp(32px, 2.6vw, 54px);
@@ -256,7 +256,7 @@ st.markdown(
     }}
 
     /* =========================
-       ✅ Inputs / Select（白底白字必殺）
+       Inputs / Select（白底白字必殺）
     ========================= */
     html, body, .stApp{{ color-scheme: dark !important; }}
 
@@ -304,25 +304,6 @@ st.markdown(
       -webkit-text-fill-color: rgba(255,255,255,0.55) !important;
     }}
 
-    .stApp input:-webkit-autofill,
-    .stApp input:-webkit-autofill:hover,
-    .stApp input:-webkit-autofill:focus,
-    .stApp textarea:-webkit-autofill,
-    .stApp textarea:-webkit-autofill:hover,
-    .stApp textarea:-webkit-autofill:focus {{
-      -webkit-text-fill-color: #fff !important;
-      caret-color: #fff !important;
-      box-shadow: 0 0 0 1000px var(--form-bg) inset !important;
-      -webkit-box-shadow: 0 0 0 1000px var(--form-bg) inset !important;
-      transition: background-color 9999s ease-out 0s;
-    }}
-
-    .stApp input:-moz-autofill,
-    .stApp textarea:-moz-autofill {{
-      box-shadow: 0 0 0 1000px var(--form-bg) inset !important;
-      -moz-text-fill-color: #fff !important;
-    }}
-
     .stApp [role="listbox"] {{
       background-color: var(--form-bg-2) !important;
       border: 1px solid rgba(255,255,255,0.12) !important;
@@ -354,9 +335,7 @@ st.markdown(
       box-shadow: 0 18px 46px rgba(255,75,75,0.32);
     }}
 
-    /* =========================
-       ✅ st.link_button 永遠可見（不需點擊才變色）
-    ========================= */
+    /* st.link_button 永遠可見（不需點擊才變色） */
     [data-testid="stLinkButton"] a{{
       display:flex !important;
       align-items:center !important;
@@ -388,8 +367,6 @@ st.markdown(
       transform: translateY(-1px) scale(1.01);
       box-shadow: 0 18px 46px rgba(255,75,75,0.32) !important;
     }}
-
-    /* 若部分版本 link_button 內部是 button，補一層保險 */
     [data-testid="stLinkButton"] button{{
       background: linear-gradient(135deg, var(--accent), var(--accent2)) !important;
       color:#fff !important;
@@ -424,9 +401,7 @@ st.markdown(
       font-size: 0.98rem !important;
     }}
 
-    /* =========================
-       ✅ 名字金色漸層
-    ========================= */
+    /* 名字金色漸層 */
     .gold-gradient{{
       background: linear-gradient(90deg, #FFF2B8 0%, #FFD700 35%, #FFB84D 70%, #FFE9A6 100%);
       -webkit-background-clip: text;
@@ -435,9 +410,7 @@ st.markdown(
       text-shadow: 0 10px 28px rgba(255, 215, 0, 0.16);
     }}
 
-    /* =========================
-       ✅ 右上角徽章（永遠最上層）
-    ========================= */
+    /* 右上角徽章（永遠最上層） */
     .card-badge{{
       position: absolute;
       top: 10px;
@@ -458,77 +431,45 @@ st.markdown(
     }}
 
     /* =========================
-       ✅ Selectbox 下拉選單（BaseWeb Popover Portal）強制深色
+       Selectbox 下拉選單（BaseWeb Popover Portal）強制深色
        這個區塊一定要「不要加 .stApp 前綴」
-       ✅ 修正你目前遇到的：白底 + 白字（portal 在 body 外）
     ========================= */
-
-    /* portal 本體（有些版本會是 data-baseweb="portal"） */
-    div[data-baseweb="portal"] {{
+    div[data-baseweb="popover"]{{
       z-index: 99999 !important;
     }}
-
-    /* popover / menu 容器整片強制深色（避免底是白色） */
-    div[data-baseweb="popover"],
-    div[data-baseweb="menu"],
-    div[data-baseweb="portal"] div[data-baseweb="popover"],
-    div[data-baseweb="portal"] div[data-baseweb="menu"] {{
+    div[data-baseweb="popover"] [role="listbox"],
+    div[data-baseweb="popover"] ul{{
       background-color: var(--form-bg-2) !important;
       border: 1px solid rgba(255,255,255,0.14) !important;
       border-radius: 14px !important;
       overflow: hidden !important;
     }}
-
-    /* listbox（ul / role=listbox） */
-    div[data-baseweb="popover"] [role="listbox"],
-    div[data-baseweb="popover"] ul,
-    div[data-baseweb="menu"] [role="listbox"],
-    div[data-baseweb="menu"] ul,
-    div[data-baseweb="portal"] [role="listbox"],
-    div[data-baseweb="portal"] ul {{
-      background-color: var(--form-bg-2) !important;
-      border: 0 !important;
-    }}
-
-    /* option（li / role=option）文字強制白、底透明 */
     div[data-baseweb="popover"] [role="option"],
-    div[data-baseweb="popover"] li,
-    div[data-baseweb="menu"] [role="option"],
-    div[data-baseweb="menu"] li,
-    div[data-baseweb="portal"] [role="option"],
-    div[data-baseweb="portal"] li {{
+    div[data-baseweb="popover"] li{{
       color: #fff !important;
       background: transparent !important;
     }}
-
-    /* option 內部所有字也強制白（避免被全域/內建覆蓋） */
-    div[data-baseweb="popover"] [role="option"] *,
-    div[data-baseweb="popover"] li *,
-    div[data-baseweb="menu"] [role="option"] *,
-    div[data-baseweb="menu"] li *,
-    div[data-baseweb="portal"] [role="option"] *,
-    div[data-baseweb="portal"] li * {{
+    div[data-baseweb="popover"] [role="option"] *{{
       color: #fff !important;
       -webkit-text-fill-color: #fff !important;
     }}
-
-    /* hover / selected */
     div[data-baseweb="popover"] [role="option"]:hover,
-    div[data-baseweb="popover"] li:hover,
-    div[data-baseweb="menu"] [role="option"]:hover,
-    div[data-baseweb="menu"] li:hover,
-    div[data-baseweb="portal"] [role="option"]:hover,
-    div[data-baseweb="portal"] li:hover {{
+    div[data-baseweb="popover"] li:hover{{
       background: rgba(255,255,255,0.08) !important;
     }}
-
     div[data-baseweb="popover"] [role="option"][aria-selected="true"],
-    div[data-baseweb="popover"] li[aria-selected="true"],
-    div[data-baseweb="menu"] [role="option"][aria-selected="true"],
-    div[data-baseweb="menu"] li[aria-selected="true"],
-    div[data-baseweb="portal"] [role="option"][aria-selected="true"],
-    div[data-baseweb="portal"] li[aria-selected="true"] {{
+    div[data-baseweb="popover"] li[aria-selected="true"]{{
       background: rgba(255,255,255,0.12) !important;
+    }}
+
+    div[data-baseweb="menu"]{{
+      background-color: var(--form-bg-2) !important;
+      border: 1px solid rgba(255,255,255,0.14) !important;
+      border-radius: 14px !important;
+    }}
+    div[data-baseweb="menu"] *{{
+      color:#fff !important;
+      -webkit-text-fill-color:#fff !important;
     }}
     </style>
     """,
@@ -551,6 +492,12 @@ if "answers_map" not in st.session_state:
     st.session_state.answers_map = {}
 if "notified" not in st.session_state:
     st.session_state.notified = False
+
+# interest（必填才寫入）
+if "u_interest" not in st.session_state:
+    st.session_state.u_interest = ""
+if "u_interest_other" not in st.session_state:
+    st.session_state.u_interest_other = ""
 
 
 # =========================
@@ -585,7 +532,7 @@ def gs_update(conn, worksheet: str, data):
 
 
 # =========================
-# ✅ GSheets 自檢（debug=1）
+# GSheets 自檢（debug=1）
 # =========================
 def gsheets_self_check():
     st.sidebar.write("---")
@@ -745,7 +692,7 @@ st.sidebar.markdown(
 
 
 # =========================
-# 7.5) ✅ 主要頁面顧問卡（安全版）＋徽章
+# 7.5) 主要頁面顧問卡（安全版）＋徽章
 # =========================
 def show_partner_card():
     name = str(partner.get("name", "")).strip()
@@ -824,6 +771,15 @@ COPY = {
     "D": {"id":"你是守護型：你不求快，你求穩且不翻車。","pain":"資訊太雜、風險不清楚，你就會寧可慢也不敢衝。","hook":"你會喜歡「透明可控」：流程每一步都看得懂，覺得安全才敢放大。","cta":"D1","traits":["穩健","可靠","風險意識強"],"blind":"太保守＝容易錯過窗口","next":"用安全版本先跑一輪，你會越來越敢放大。"},
 }
 
+INTEREST_OPTIONS = [
+    "AI 工具/自動化課",
+    "健康講座（植化素/水素/生活習慣）",
+    "被動收入/第二收入",
+    "團隊經營/複製系統",
+    "其他（可填）",
+]
+INTEREST_PLACEHOLDER = "請選擇（必填）"
+
 
 # =========================
 # 9) Header / Progress
@@ -859,7 +815,24 @@ def push_line(token: str, to_id: str, text: str):
         pass
 
 
-def write_lead_and_notify(primary: str, secondary: str, persona_name: str, counts: Counter, keyword: str):
+LEADS_COLS = [
+    "time",
+    "ref",
+    "partner_name",
+    "client_name",
+    "client_job",
+    "interest",
+    "result",
+    "result_primary",
+    "result_secondary",
+    "scores",
+    "keyword",
+    "mode",
+    "funnel",
+]
+
+
+def write_lead_and_notify(primary: str, secondary: str, persona_name: str, counts: Counter, keyword: str, interest: str):
     tz = timezone(timedelta(hours=8))
     now_tw = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
 
@@ -869,10 +842,12 @@ def write_lead_and_notify(primary: str, secondary: str, persona_name: str, count
         df_leads = gs_read(conn, "leads", ttl=0 if DEBUG else 30)
         df_leads.columns = df_leads.columns.str.strip().str.lower()
     except Exception:
-        df_leads = pd.DataFrame(columns=[
-            "time","ref","partner_name","client_name","client_job",
-            "result_primary","result_secondary","scores","keyword","mode","funnel"
-        ])
+        df_leads = pd.DataFrame(columns=LEADS_COLS)
+
+    # 確保欄位存在（缺就補）
+    for c in LEADS_COLS:
+        if c not in df_leads.columns:
+            df_leads[c] = ""
 
     new_lead = pd.DataFrame([{
         "time": now_tw,
@@ -880,6 +855,8 @@ def write_lead_and_notify(primary: str, secondary: str, persona_name: str, count
         "partner_name": partner.get("name",""),
         "client_name": st.session_state.u_name,
         "client_job": st.session_state.u_domain,
+        "interest": interest,
+        "result": persona_name,
         "result_primary": primary,
         "result_secondary": secondary,
         "scores": json.dumps(dict(counts), ensure_ascii=False),
@@ -889,6 +866,10 @@ def write_lead_and_notify(primary: str, secondary: str, persona_name: str, count
     }])
 
     updated = pd.concat([df_leads, new_lead], ignore_index=True)
+
+    # 依你指定順序輸出（避免欄位亂掉）
+    updated = updated.reindex(columns=LEADS_COLS)
+
     gs_update(conn, "leads", updated)
 
     line_cfg = sget(st.secrets, "line", default={}) or {}
@@ -901,6 +882,7 @@ def write_lead_and_notify(primary: str, secondary: str, persona_name: str, count
     msg = (
         f"🚀 新名單報到（{FUNNEL_TAG}/{MODE}）\n"
         f"👤 {st.session_state.u_name}\n"
+        f"🎯 興趣：{interest}\n"
         f"🧩 類型：{primary}{('/'+secondary) if secondary else ''}  {persona_name}\n"
         f"🧷 關鍵字：{keyword}\n"
         f"💼 狀態：{st.session_state.u_domain}\n"
@@ -915,7 +897,7 @@ def write_lead_and_notify(primary: str, secondary: str, persona_name: str, count
 # Pages
 # =========================
 def page_intro():
-    # ✅ Intro 頁面：顧問卡 → 超大「立即加 LINE」→ 再往下才是測驗
+    # Intro：顧問卡 → 超大「立即加 LINE」→ 再往下才是測驗
     show_partner_card()
     render_header()
 
@@ -952,6 +934,8 @@ def page_intro():
             st.session_state.step = 1
             st.session_state.answers_map = {}
             st.session_state.notified = False
+            st.session_state.u_interest = ""
+            st.session_state.u_interest_other = ""
             st.rerun()
         else:
             st.warning("請先輸入稱呼。")
@@ -999,6 +983,29 @@ def page_quiz():
             st.rerun()
 
 
+def _interest_default_index():
+    # 讓既有值可以回填
+    cur = str(st.session_state.u_interest or "").strip()
+    if not cur:
+        return 0
+    if cur.startswith("其他：") or cur.startswith("其他:") or cur.startswith("其他"):
+        return 1 + INTEREST_OPTIONS.index("其他（可填）")
+    if cur in INTEREST_OPTIONS:
+        return 1 + INTEREST_OPTIONS.index(cur)
+    return 0
+
+
+def _normalize_interest(selection: str, other_text: str) -> str:
+    if not selection or selection == INTEREST_PLACEHOLDER:
+        return ""
+    if selection == "其他（可填）":
+        t = str(other_text or "").strip()
+        if not t:
+            return ""
+        return f"其他：{t}"
+    return selection
+
+
 def page_result():
     show_partner_card()
     render_header()
@@ -1040,65 +1047,98 @@ def page_result():
     st.write(f"下一步：{copy['next']}")
 
     st.markdown("---")
-    st.markdown("### ✅ 想領取「1頁專屬解析＋你適合的引流方式」")
-    st.write("加 LINE 後回覆關鍵字：")
-    st.code(CTA_KEYWORD, language=None)
-    st.caption("（下方可一鍵複製到剪貼簿）")
+    st.markdown("### ✅ 最後一步：你對什麼課程有興趣？（必填）")
 
-    kw_js = json.dumps(CTA_KEYWORD, ensure_ascii=False)
-    components.html(
-        f"""
-        <div style="font-family:-apple-system,BlinkMacSystemFont,'Microsoft JhengHei',sans-serif;">
-          <button id="copyBtn" style="
-            width:100%;
-            padding:12px 14px;
-            border-radius:14px;
-            border:1px solid rgba(255,215,0,0.25);
-            background: linear-gradient(135deg, rgba(255,215,0,0.92), rgba(255,200,87,0.92));
-            color:#0B0B10;
-            font-weight:900;
-            cursor:pointer;
-          ">一鍵複製關鍵字</button>
-          <div id="msg" style="margin-top:8px; color:#B8B8C6; font-size:13px;"></div>
-        </div>
-        <script>
-          const kw = {kw_js};
-          const btn = document.getElementById("copyBtn");
-          const msg = document.getElementById("msg");
-          btn.addEventListener("click", async () => {{
-            try {{
-              await navigator.clipboard.writeText(kw);
-              msg.textContent = "✅ 已複製到剪貼簿";
-            }} catch (e) {{
-              msg.textContent = "⚠️ 無法自動複製（請手動長按/複製）";
-            }}
-          }});
-        </script>
-        """,
-        height=90,
+    interest_selection = st.selectbox(
+        "請選擇一個最有興趣的方向",
+        [INTEREST_PLACEHOLDER] + INTEREST_OPTIONS,
+        index=_interest_default_index(),
+        key="interest_select",
+        disabled=bool(st.session_state.notified),
     )
 
-    if not st.session_state.notified:
-        try:
-            write_lead_and_notify(primary, secondary, persona_name, counts, CTA_KEYWORD)
-            st.session_state.notified = True
-        except Exception as e:
-            st.warning("名單已產生，但寫入 leads 或推播失敗。")
-            if DEBUG:
-                st.exception(e)
+    other_text = ""
+    if interest_selection == "其他（可填）":
+        other_text = st.text_input(
+            "其他（請填寫）",
+            value=st.session_state.u_interest_other,
+            key="interest_other",
+            disabled=bool(st.session_state.notified),
+        )
 
-    line_sid = str(partner.get("line_search_id", "")).strip()
-    if not line_sid:
-        line_sid = str(st.secrets.get("MASTER_LINE_ADD", "")).strip()
+    interest_final = _normalize_interest(interest_selection, other_text)
+    if interest_selection == "其他（可填）":
+        st.session_state.u_interest_other = str(other_text or "")
 
-    if line_sid:
-        if line_sid.startswith("@"):
-            line_url = f"https://line.me/R/ti/p/{line_sid}"
+    if interest_final:
+        st.session_state.u_interest = interest_final
+
+    ready = bool(st.session_state.u_interest)
+
+    if not ready and not st.session_state.notified:
+        st.info("請先完成「興趣（必填）」選擇，系統才會寫入名單並推播通知。")
+
+    if ready:
+        st.markdown("---")
+        st.markdown("### ✅ 想領取「1頁專屬解析＋你適合的引流方式」")
+        st.write("加 LINE 後回覆關鍵字：")
+        st.code(CTA_KEYWORD, language=None)
+        st.caption("（下方可一鍵複製到剪貼簿）")
+
+        kw_js = json.dumps(CTA_KEYWORD, ensure_ascii=False)
+        components.html(
+            f"""
+            <div style="font-family:-apple-system,BlinkMacSystemFont,'Microsoft JhengHei',sans-serif;">
+              <button id="copyBtn" style="
+                width:100%;
+                padding:12px 14px;
+                border-radius:14px;
+                border:1px solid rgba(255,215,0,0.25);
+                background: linear-gradient(135deg, rgba(255,215,0,0.92), rgba(255,200,87,0.92));
+                color:#0B0B10;
+                font-weight:900;
+                cursor:pointer;
+              ">一鍵複製關鍵字</button>
+              <div id="msg" style="margin-top:8px; color:#B8B8C6; font-size:13px;"></div>
+            </div>
+            <script>
+              const kw = {kw_js};
+              const btn = document.getElementById("copyBtn");
+              const msg = document.getElementById("msg");
+              btn.addEventListener("click", async () => {{
+                try {{
+                  await navigator.clipboard.writeText(kw);
+                  msg.textContent = "✅ 已複製到剪貼簿";
+                }} catch (e) {{
+                  msg.textContent = "⚠️ 無法自動複製（請手動長按/複製）";
+                }}
+              }});
+            </script>
+            """,
+            height=90,
+        )
+
+        if not st.session_state.notified:
+            try:
+                write_lead_and_notify(primary, secondary, persona_name, counts, CTA_KEYWORD, st.session_state.u_interest)
+                st.session_state.notified = True
+            except Exception as e:
+                st.warning("名單已產生，但寫入 leads 或推播失敗。")
+                if DEBUG:
+                    st.exception(e)
+
+        line_sid = str(partner.get("line_search_id", "")).strip()
+        if not line_sid:
+            line_sid = str(st.secrets.get("MASTER_LINE_ADD", "")).strip()
+
+        if line_sid:
+            if line_sid.startswith("@"):
+                line_url = f"https://line.me/R/ti/p/{line_sid}"
+            else:
+                line_url = f"https://line.me/ti/p/~{line_sid}"
+            st.link_button("💬 加 LINE 領取解析", line_url)
         else:
-            line_url = f"https://line.me/ti/p/~{line_sid}"
-        st.link_button("💬 加 LINE 領取解析", line_url)
-    else:
-        st.info("（尚未設定 line_search_id / MASTER_LINE_ADD）")
+            st.info("（尚未設定 line_search_id / MASTER_LINE_ADD）")
 
     if st.button("重新測驗", key="reset_btn"):
         st.session_state.page = "intro"
@@ -1107,6 +1147,8 @@ def page_result():
         st.session_state.u_domain = ""
         st.session_state.answers_map = {}
         st.session_state.notified = False
+        st.session_state.u_interest = ""
+        st.session_state.u_interest_other = ""
         st.rerun()
 
 
