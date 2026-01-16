@@ -28,7 +28,6 @@ APP_VERSION = "deploy-check-001"
 st.sidebar.caption(f"APP_VERSION: {APP_VERSION}")
 
 
-
 # =========================
 # Helpers
 # =========================
@@ -72,7 +71,7 @@ MODE = str(get_qp("mode", "A")).strip()
 # =========================
 # 2) ✅ CSS（每次 rerun 都注入，避免按開始測驗後 CSS 消失導致跑版）
 # =========================
-CSS_VERSION = "2026-01-16-08"
+CSS_VERSION = "2026-01-16-09"
 
 st.markdown(
     f"""
@@ -324,12 +323,50 @@ st.markdown(
       -moz-text-fill-color: #fff !important;
     }}
 
-    .stApp [role="listbox"] {{
+    /* =========================
+       ✅【修正】Selectbox 下拉選單（BaseWeb Portal 常掛在 body，不在 .stApp 內）
+       → 不能只寫 .stApp 前綴，否則會抓不到而回到白底
+    ========================= */
+    div[data-baseweb="popover"] > div{{
+      background-color: var(--form-bg-2) !important;
+      border: 1px solid rgba(255,255,255,0.12) !important;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.55) !important;
+      border-radius: 16px !important;
+      overflow: hidden !important;
+    }}
+    div[data-baseweb="popover"] *{{
+      color: #fff !important;
+      -webkit-text-fill-color: #fff !important;
+    }}
+
+    div[data-baseweb="menu"]{{
+      background-color: var(--form-bg-2) !important;
+    }}
+    div[data-baseweb="menu"] *{{
+      color:#fff !important;
+      -webkit-text-fill-color:#fff !important;
+    }}
+
+    ul[role="listbox"],
+    div[role="listbox"]{{
       background-color: var(--form-bg-2) !important;
       border: 1px solid rgba(255,255,255,0.12) !important;
     }}
-    .stApp [role="option"] {{
-      color: #fff !important;
+
+    li[role="option"],
+    div[role="option"]{{
+      background-color: transparent !important;
+      color:#fff !important;
+    }}
+
+    li[role="option"]:hover,
+    div[role="option"]:hover{{
+      background-color: rgba(255,255,255,0.06) !important;
+    }}
+
+    li[role="option"][aria-selected="true"],
+    div[role="option"][aria-selected="true"]{{
+      background-color: rgba(255,215,0,0.14) !important;
     }}
 
     /* progress */
@@ -644,6 +681,20 @@ p_img = p_img if url_ok(p_img) else ""
 BADGE_URL = "https://lh3.googleusercontent.com/d/1Dz9q_hoxG4BN9YOHymw7JjqJaq5kEFGf"
 
 
+def build_line_url() -> str:
+    """統一：產生 LINE 加好友 URL（intro/result 都共用）"""
+    line_sid = str(partner.get("line_search_id", "")).strip()
+    if not line_sid:
+        line_sid = str(st.secrets.get("MASTER_LINE_ADD", "")).strip()
+
+    if not line_sid:
+        return ""
+
+    if line_sid.startswith("@"):
+        return f"https://line.me/R/ti/p/{line_sid}"
+    return f"https://line.me/ti/p/~{line_sid}"
+
+
 # =========================
 # 7) Sidebar（海報式顧問卡 + 徽章）
 # =========================
@@ -842,10 +893,20 @@ def write_lead_and_notify(primary: str, secondary: str, persona_name: str, count
 # Pages
 # =========================
 def page_intro():
+    # ✅ 顧問卡
     show_partner_card()
+
+    # ✅ 超大「立即加 LINE」
+    line_url = build_line_url()
+    if line_url:
+        st.link_button("💬 立即加 LINE", line_url)
+    else:
+        st.info("（尚未設定 line_search_id / MASTER_LINE_ADD）")
+
+    # ✅ 下面才是：做 10 題領取解析
     render_header()
 
-    st.markdown('<div class="hero-title">開始前 10 秒，測出你是哪一型</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero-title">想領取專屬解析？做 10 題</div>', unsafe_allow_html=True)
     st.markdown('<div class="hero-subtitle">你會拿到：人格類型＋卡關點＋下一步建議</div>', unsafe_allow_html=True)
 
     name = st.text_input("如何稱呼你？", placeholder="輸入暱稱/名字", value=st.session_state.u_name)
@@ -997,15 +1058,8 @@ def page_result():
             if DEBUG:
                 st.exception(e)
 
-    line_sid = str(partner.get("line_search_id", "")).strip()
-    if not line_sid:
-        line_sid = str(st.secrets.get("MASTER_LINE_ADD", "")).strip()
-
-    if line_sid:
-        if line_sid.startswith("@"):
-            line_url = f"https://line.me/R/ti/p/{line_sid}"
-        else:
-            line_url = f"https://line.me/ti/p/~{line_sid}"
+    line_url = build_line_url()
+    if line_url:
         st.link_button("💬 加 LINE 領取解析", line_url)
     else:
         st.info("（尚未設定 line_search_id / MASTER_LINE_ADD）")
