@@ -56,6 +56,11 @@ def sget(dct: dict, *path, default=None):
     return cur
 
 
+def norm_ref(x: str) -> str:
+    """ref 統一化（避免空白/大小寫造成找不到夥伴）"""
+    return str(x or "").strip().lower()
+
+
 DEBUG = str(get_qp("debug", "0")).lower() in ("1", "true", "yes", "y")
 FUNNEL_TAG = str(get_qp("cl", "cl3")).strip()
 MODE = str(get_qp("mode", "A")).strip()
@@ -78,6 +83,7 @@ if "css_loaded" not in st.session_state:
           --accent2:#FF4B4B;
           --font: 'Microsoft JhengHei', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
         }
+
         .stApp{
           background:
             radial-gradient(1200px 600px at 70% 15%, rgba(255,215,0,0.10), transparent 60%),
@@ -95,6 +101,66 @@ if "css_loaded" not in st.session_state:
           border-right: 1px solid rgba(255,255,255,0.06);
         }
 
+        /* --- Partner Card (mobile friendly) --- */
+        .partner-card{
+          display:flex; align-items:center; gap:12px;
+          padding:12px 14px;
+          border-radius:18px;
+          border:1px solid rgba(255,255,255,0.10);
+          background: rgba(255,255,255,0.05);
+          box-shadow: 0 10px 25px rgba(0,0,0,0.22);
+          margin: 6px 0 12px 0;
+        }
+        .partner-img{
+          width:56px; height:56px; border-radius:16px;
+          object-fit:cover;
+          border:1px solid rgba(255,215,0,0.25);
+          flex: 0 0 auto;
+        }
+        .partner-meta{ line-height:1.15; }
+        .partner-kicker{
+          font-size:12px; color:rgba(255,255,255,0.72) !important;
+          letter-spacing:0.3px;
+        }
+        .partner-name{
+          font-size: clamp(18px, 2.2vw, 24px);
+          font-weight: 900;
+          margin-top:2px;
+        }
+        .partner-title{
+          font-size: clamp(13px, 1.6vw, 16px);
+          color: rgba(255,255,255,0.78) !important;
+          margin-top:2px;
+        }
+        .partner-ref{
+          margin-top:4px;
+          font-size:12px;
+          color: rgba(255,255,255,0.65) !important;
+        }
+
+        /* --- Hero text sizes --- */
+        .hero-title{
+          font-size: clamp(26px, 3.2vw, 40px);
+          font-weight: 1000;
+          margin: 6px 0 2px 0;
+          letter-spacing: 0.2px;
+        }
+        .hero-subtitle{
+          font-size: clamp(14px, 1.7vw, 18px);
+          color: rgba(255,255,255,0.78) !important;
+          margin: 0 0 8px 0;
+        }
+        .quiz-step{
+          font-size: clamp(18px, 2.1vw, 24px);
+          font-weight: 900;
+          margin-top: 4px;
+        }
+        .quiz-question{
+          font-size: clamp(20px, 2.5vw, 30px);
+          font-weight: 1000;
+          margin: 6px 0 10px 0;
+        }
+
         /* inputs */
         [data-baseweb="input"] input,
         [data-baseweb="textarea"] textarea{
@@ -102,6 +168,7 @@ if "css_loaded" not in st.session_state:
           border: 1px solid rgba(255,255,255,0.10) !important;
           color:#fff !important;
           border-radius: 14px !important;
+          font-size: 16px !important;
         }
         [data-baseweb="select"] > div{
           background: rgba(255,255,255,0.06) !important;
@@ -125,6 +192,8 @@ if "css_loaded" not in st.session_state:
           padding: 0.92rem 1rem;
           box-shadow: 0 14px 35px rgba(255,75,75,0.22);
           transition: 0.16s;
+          font-size: 16px !important;
+          font-weight: 900 !important;
         }
         div.stButton > button:hover{
           transform: translateY(-1px) scale(1.01);
@@ -135,13 +204,19 @@ if "css_loaded" not in st.session_state:
         div[role="radiogroup"] > label{
           background: rgba(255,255,255,0.04);
           border: 1px solid rgba(255,255,255,0.10);
-          padding: 10px 12px;
-          border-radius: 14px;
-          margin: 8px 0;
+          padding: 12px 14px;
+          border-radius: 16px;
+          margin: 10px 0;
         }
         div[role="radiogroup"] > label:hover{
           border-color: rgba(255,215,0,0.35);
           background: rgba(255,215,0,0.06);
+        }
+        div[role="radiogroup"] p,
+        div[role="radiogroup"] span{
+          font-size: clamp(16px, 1.9vw, 20px) !important;
+          font-weight: 800 !important;
+          line-height: 1.25 !important;
         }
 
         /* code */
@@ -150,6 +225,7 @@ if "css_loaded" not in st.session_state:
           color: #EEE !important;
           border: 1px solid rgba(255,255,255,0.10) !important;
           border-radius: 14px !important;
+          font-size: 16px !important;
         }
         </style>
         """,
@@ -287,13 +363,19 @@ def load_all_partners():
         st.code(", ".join(sorted(missing)))
         st.stop()
 
-    df_all["ref"] = df_all["ref"].astype(str).str.strip()
+    # ✅ ref 統一化（避免找不到）
+    df_all["ref"] = df_all["ref"].astype(str).map(norm_ref)
+
+    # ✅ line_search_id / line_id / line_token 也順便清理空白
+    for col in ["line_search_id", "line_id", "line_token"]:
+        df_all[col] = df_all[col].astype(str).str.strip()
+
     return df_all
 
 
 def pick_partner(df_all: pd.DataFrame, ref: str) -> dict:
-    ref = str(ref).strip()
-    all_refs = set(df_all["ref"].astype(str).str.strip().values)
+    ref = norm_ref(ref)
+    all_refs = set(df_all["ref"].astype(str).map(norm_ref).values)
 
     if ref in all_refs:
         return df_all[df_all["ref"] == ref].iloc[0].to_dict()
@@ -310,13 +392,13 @@ except Exception as e:
     st.stop()
 
 
-ref = str(get_qp("ref", "master")).strip()
+ref = norm_ref(get_qp("ref", "master"))
 partner = pick_partner(df_all, ref)
 p_img = drive_img(partner.get("img_url", ""))
 
 
 # =========================
-# 7) Sidebar（完全不用 HTML 包版面）
+# 7) Sidebar（桌機用）
 # =========================
 st.sidebar.write("---")
 if p_img:
@@ -328,17 +410,55 @@ if DEBUG:
 
 
 # =========================
+# 7.5) ✅ 主要頁面顧問卡（手機也看得到）
+# =========================
+def show_partner_card():
+    name = str(partner.get("name", "")).strip()
+    title = str(partner.get("title", "")).strip()
+    img = str(p_img or "").strip()
+
+    ref_text = str(partner.get("ref", "")).strip()
+    ref_html = f'<div class="partner-ref">ref：{ref_text}</div>' if DEBUG and ref_text else ""
+
+    if img:
+        html = f"""
+        <div class="partner-card">
+          <img class="partner-img" src="{img}" alt="partner" />
+          <div class="partner-meta">
+            <div class="partner-kicker">你的專屬顧問</div>
+            <div class="partner-name">{name}</div>
+            <div class="partner-title">🎖️ {title}</div>
+            {ref_html}
+          </div>
+        </div>
+        """
+    else:
+        html = f"""
+        <div class="partner-card">
+          <div class="partner-meta">
+            <div class="partner-kicker">你的專屬顧問</div>
+            <div class="partner-name">{name}</div>
+            <div class="partner-title">🎖️ {title}</div>
+            {ref_html}
+          </div>
+        </div>
+        """
+    st.markdown(html, unsafe_allow_html=True)
+
+
+# =========================
 # 8) 題庫 / 文案
 # =========================
 questions = [
     ("① AI 起風了，你會？", [("🚀 先衝先卡位", "A"), ("🧠 先做一套方法", "B"), ("🤝 先找對的人一起", "C"), ("🛡️ 先確認不會翻車", "D")]),
     ("② 你想要的「有錢」是？", [("✨ 人生自由選擇", "A"), ("💤 睡覺也進帳", "B"), ("❤️ 顧家也能助人", "C"), ("🏦 穩穩變富安心", "D")]),
-("③ 機會來了，你會？", [
-    ("⚡ 先出手再優化", "A"),
-    ("📊 先算勝率再做", "B"),
-    ("\U0001F465\u00A0先\u7D44組隊再放大", "C"),  # 👥 先組隊再放大
-    ("🧯 先看最壞情況", "D")
-]),    ("④ 你的天賦底牌是？", [("🧭 抓趨勢定方向", "A"), ("🧩 拆解系統化", "B"), ("🌿 連結信任感", "C"), ("🧱 穩住抗風險", "D")]),
+    ("③ 機會來了，你會？", [
+        ("⚡ 先出手再優化", "A"),
+        ("📊 先算勝率再做", "B"),
+        ("👥 先組隊再放大", "C"),
+        ("🧯 先看最壞情況", "D")
+    ]),
+    ("④ 你的天賦底牌是？", [("🧭 抓趨勢定方向", "A"), ("🧩 拆解系統化", "B"), ("🌿 連結信任感", "C"), ("🧱 穩住抗風險", "D")]),
     ("⑤ 你最受不了的是？", [("🐢 慢到錯過風口", "A"), ("🌀 沒邏輯亂做", "B"), ("🧊 冷冰冰沒連結", "C"), ("🎢 太冒險不穩", "D")]),
     ("⑥ 你下決策最靠？", [("🔮 趨勢直覺", "A"), ("🧾 數據計算", "B"), ("🫶 圈層建議", "C"), ("📌 穩定經驗", "D")]),
     ("⑦ 你卡關時會？", [("🌪️ 換路找新風口", "A"), ("🔧 回頭修流程", "B"), ("☎️ 找人聊再出發", "C"), ("🧊 縮風險先守住", "D")]),
@@ -364,11 +484,8 @@ COPY = {
 
 
 # =========================
-# 9) Header / Progress
+# 9) Header / Progress（改成 function，讓顧問卡可以放在標題上方）
 # =========================
-st.markdown("## © 2026 **AI 財富診斷**")
-st.caption("10 題快速測出你的風格，給你「1頁專屬解析」與下一步建議")
-
 def progress_value():
     if st.session_state.page == "intro":
         return 0.0
@@ -376,7 +493,11 @@ def progress_value():
         return min((int(st.session_state.step) - 1) / TOTAL, 1.0)
     return 1.0
 
-st.progress(progress_value())
+
+def render_header():
+    st.markdown('<div class="hero-title">© 2026 AI 財富診斷</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero-subtitle">10 題快速測出你的風格，給你「1頁專屬解析」與下一步建議</div>', unsafe_allow_html=True)
+    st.progress(progress_value())
 
 
 # =========================
@@ -452,8 +573,11 @@ def write_lead_and_notify(primary: str, secondary: str, persona_name: str, count
 # Pages
 # =========================
 def page_intro():
-    st.subheader("開始前 10 秒，測出你是哪一型")
-    st.caption("你會拿到：人格類型＋卡關點＋下一步建議")
+    show_partner_card()
+    render_header()
+
+    st.markdown('<div class="hero-title">開始前 10 秒，測出你是哪一型</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero-subtitle">你會拿到：人格類型＋卡關點＋下一步建議</div>', unsafe_allow_html=True)
 
     name = st.text_input("如何稱呼你？", placeholder="輸入暱稱/名字", value=st.session_state.u_name)
 
@@ -475,11 +599,14 @@ def page_intro():
 
 
 def page_quiz():
+    show_partner_card()
+    render_header()
+
     step = int(st.session_state.step)
     q_txt, opts = questions[step - 1]
 
-    st.markdown(f"### 第 **{step}** 題 / 共 **{TOTAL}** 題")
-    st.markdown(f"**{q_txt}**")
+    st.markdown(f'<div class="quiz-step">第 {step} 題 / 共 {TOTAL} 題</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="quiz-question">{q_txt}</div>', unsafe_allow_html=True)
 
     labels = [o[0] for o in opts]
     label_to_tag = {o[0]: o[1] for o in opts}
@@ -514,6 +641,9 @@ def page_quiz():
 
 
 def page_result():
+    show_partner_card()
+    render_header()
+
     if len(st.session_state.answers_map) < TOTAL:
         st.warning("⚠️ 你尚未完成全部題目，系統已幫你返回題目頁。")
         st.session_state.page = "quiz"
@@ -533,7 +663,10 @@ def page_result():
     CTA_KEYWORD = copy.get("cta", "R1")
 
     st.balloons()
-    st.markdown(f"## {st.session_state.u_name} 的測驗結果")
+    st.markdown(
+        f'<div class="hero-title">{st.session_state.u_name} 的測驗結果</div>',
+        unsafe_allow_html=True
+    )
     st.markdown(f"### 類型：**{persona_name}**")
     st.caption("特質： " + "｜".join(copy["traits"]))
 
@@ -646,7 +779,7 @@ def sidebar_admin_panel():
 
         elif partner_pwd and str(pwd) == partner_pwd:
             st.subheader(f"📈 {partner.get('name','')} 的個人名單")
-            mask = all_leads["ref"].astype(str).str.strip() == partner_ref
+            mask = all_leads["ref"].astype(str).map(norm_ref) == norm_ref(partner_ref)
             st.dataframe(all_leads[mask], use_container_width=True)
 
         else:
