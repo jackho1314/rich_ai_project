@@ -71,7 +71,7 @@ MODE = str(get_qp("mode", "A")).strip()
 # =========================
 # 2) ✅ CSS（每次 rerun 都注入，避免按開始測驗後 CSS 消失導致跑版）
 # =========================
-CSS_VERSION = "2026-01-16-09"
+CSS_VERSION = "2026-01-16-08"
 
 st.markdown(
     f"""
@@ -323,50 +323,12 @@ st.markdown(
       -moz-text-fill-color: #fff !important;
     }}
 
-    /* =========================
-       ✅【修正】Selectbox 下拉選單（BaseWeb Portal 常掛在 body，不在 .stApp 內）
-       → 不能只寫 .stApp 前綴，否則會抓不到而回到白底
-    ========================= */
-    div[data-baseweb="popover"] > div{{
+    .stApp [role="listbox"] {{
       background-color: var(--form-bg-2) !important;
       border: 1px solid rgba(255,255,255,0.12) !important;
-      box-shadow: 0 18px 50px rgba(0,0,0,0.55) !important;
-      border-radius: 16px !important;
-      overflow: hidden !important;
     }}
-    div[data-baseweb="popover"] *{{
+    .stApp [role="option"] {{
       color: #fff !important;
-      -webkit-text-fill-color: #fff !important;
-    }}
-
-    div[data-baseweb="menu"]{{
-      background-color: var(--form-bg-2) !important;
-    }}
-    div[data-baseweb="menu"] *{{
-      color:#fff !important;
-      -webkit-text-fill-color:#fff !important;
-    }}
-
-    ul[role="listbox"],
-    div[role="listbox"]{{
-      background-color: var(--form-bg-2) !important;
-      border: 1px solid rgba(255,255,255,0.12) !important;
-    }}
-
-    li[role="option"],
-    div[role="option"]{{
-      background-color: transparent !important;
-      color:#fff !important;
-    }}
-
-    li[role="option"]:hover,
-    div[role="option"]:hover{{
-      background-color: rgba(255,255,255,0.06) !important;
-    }}
-
-    li[role="option"][aria-selected="true"],
-    div[role="option"][aria-selected="true"]{{
-      background-color: rgba(255,215,0,0.14) !important;
     }}
 
     /* progress */
@@ -493,6 +455,80 @@ st.markdown(
       .card-badge{{ width: 36px !important; }}
       div.stButton > button{{ padding: 1.1rem 1.05rem; }}
       [data-testid="stLinkButton"] a{{ padding: 1.1rem 1.05rem !important; }}
+    }}
+
+    /* =========================
+       ✅ Selectbox 下拉選單（BaseWeb Popover Portal）強制深色
+       這個區塊一定要「不要加 .stApp 前綴」
+       ✅ 修正你目前遇到的：白底 + 白字（portal 在 body 外）
+    ========================= */
+
+    /* portal 本體（有些版本會是 data-baseweb="portal"） */
+    div[data-baseweb="portal"] {{
+      z-index: 99999 !important;
+    }}
+
+    /* popover / menu 容器整片強制深色（避免底是白色） */
+    div[data-baseweb="popover"],
+    div[data-baseweb="menu"],
+    div[data-baseweb="portal"] div[data-baseweb="popover"],
+    div[data-baseweb="portal"] div[data-baseweb="menu"] {{
+      background-color: var(--form-bg-2) !important;
+      border: 1px solid rgba(255,255,255,0.14) !important;
+      border-radius: 14px !important;
+      overflow: hidden !important;
+    }}
+
+    /* listbox（ul / role=listbox） */
+    div[data-baseweb="popover"] [role="listbox"],
+    div[data-baseweb="popover"] ul,
+    div[data-baseweb="menu"] [role="listbox"],
+    div[data-baseweb="menu"] ul,
+    div[data-baseweb="portal"] [role="listbox"],
+    div[data-baseweb="portal"] ul {{
+      background-color: var(--form-bg-2) !important;
+      border: 0 !important;
+    }}
+
+    /* option（li / role=option）文字強制白、底透明 */
+    div[data-baseweb="popover"] [role="option"],
+    div[data-baseweb="popover"] li,
+    div[data-baseweb="menu"] [role="option"],
+    div[data-baseweb="menu"] li,
+    div[data-baseweb="portal"] [role="option"],
+    div[data-baseweb="portal"] li {{
+      color: #fff !important;
+      background: transparent !important;
+    }}
+
+    /* option 內部所有字也強制白（避免被全域/內建覆蓋） */
+    div[data-baseweb="popover"] [role="option"] *,
+    div[data-baseweb="popover"] li *,
+    div[data-baseweb="menu"] [role="option"] *,
+    div[data-baseweb="menu"] li *,
+    div[data-baseweb="portal"] [role="option"] *,
+    div[data-baseweb="portal"] li * {{
+      color: #fff !important;
+      -webkit-text-fill-color: #fff !important;
+    }}
+
+    /* hover / selected */
+    div[data-baseweb="popover"] [role="option"]:hover,
+    div[data-baseweb="popover"] li:hover,
+    div[data-baseweb="menu"] [role="option"]:hover,
+    div[data-baseweb="menu"] li:hover,
+    div[data-baseweb="portal"] [role="option"]:hover,
+    div[data-baseweb="portal"] li:hover {{
+      background: rgba(255,255,255,0.08) !important;
+    }}
+
+    div[data-baseweb="popover"] [role="option"][aria-selected="true"],
+    div[data-baseweb="popover"] li[aria-selected="true"],
+    div[data-baseweb="menu"] [role="option"][aria-selected="true"],
+    div[data-baseweb="menu"] li[aria-selected="true"],
+    div[data-baseweb="portal"] [role="option"][aria-selected="true"],
+    div[data-baseweb="portal"] li[aria-selected="true"] {{
+      background: rgba(255,255,255,0.12) !important;
     }}
     </style>
     """,
@@ -679,20 +715,6 @@ p_img = drive_img(partner.get("img_url", ""))
 p_img = p_img if url_ok(p_img) else ""
 
 BADGE_URL = "https://lh3.googleusercontent.com/d/1Dz9q_hoxG4BN9YOHymw7JjqJaq5kEFGf"
-
-
-def build_line_url() -> str:
-    """統一：產生 LINE 加好友 URL（intro/result 都共用）"""
-    line_sid = str(partner.get("line_search_id", "")).strip()
-    if not line_sid:
-        line_sid = str(st.secrets.get("MASTER_LINE_ADD", "")).strip()
-
-    if not line_sid:
-        return ""
-
-    if line_sid.startswith("@"):
-        return f"https://line.me/R/ti/p/{line_sid}"
-    return f"https://line.me/ti/p/~{line_sid}"
 
 
 # =========================
@@ -893,19 +915,26 @@ def write_lead_and_notify(primary: str, secondary: str, persona_name: str, count
 # Pages
 # =========================
 def page_intro():
-    # ✅ 顧問卡
+    # ✅ Intro 頁面：顧問卡 → 超大「立即加 LINE」→ 再往下才是測驗
     show_partner_card()
+    render_header()
 
-    # ✅ 超大「立即加 LINE」
-    line_url = build_line_url()
-    if line_url:
+    line_sid = str(partner.get("line_search_id", "")).strip()
+    if not line_sid:
+        line_sid = str(st.secrets.get("MASTER_LINE_ADD", "")).strip()
+
+    if line_sid:
+        if line_sid.startswith("@"):
+            line_url = f"https://line.me/R/ti/p/{line_sid}"
+        else:
+            line_url = f"https://line.me/ti/p/~{line_sid}"
+
         st.link_button("💬 立即加 LINE", line_url)
+        st.caption("（加 LINE 後可領取專屬解析與活動資訊）")
     else:
         st.info("（尚未設定 line_search_id / MASTER_LINE_ADD）")
 
-    # ✅ 下面才是：做 10 題領取解析
-    render_header()
-
+    st.markdown("---")
     st.markdown('<div class="hero-title">想領取專屬解析？做 10 題</div>', unsafe_allow_html=True)
     st.markdown('<div class="hero-subtitle">你會拿到：人格類型＋卡關點＋下一步建議</div>', unsafe_allow_html=True)
 
@@ -1058,8 +1087,15 @@ def page_result():
             if DEBUG:
                 st.exception(e)
 
-    line_url = build_line_url()
-    if line_url:
+    line_sid = str(partner.get("line_search_id", "")).strip()
+    if not line_sid:
+        line_sid = str(st.secrets.get("MASTER_LINE_ADD", "")).strip()
+
+    if line_sid:
+        if line_sid.startswith("@"):
+            line_url = f"https://line.me/R/ti/p/{line_sid}"
+        else:
+            line_url = f"https://line.me/ti/p/~{line_sid}"
         st.link_button("💬 加 LINE 領取解析", line_url)
     else:
         st.info("（尚未設定 line_search_id / MASTER_LINE_ADD）")
