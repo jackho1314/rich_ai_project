@@ -794,7 +794,7 @@ def progress_value():
 
 def render_header():
     st.markdown('<div class="hero-title">© 2026 AI 財富診斷</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hero-subtitle">「價值400元限時免費」10 題快速測出你的風格，給你「1頁專屬解析」與下一步建議</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero-subtitle">「價值1200元限時免費」10 題快速測出你的風格，給你「1頁專屬解析」與下一步建議</div>', unsafe_allow_html=True)
     st.progress(progress_value())
 
 
@@ -917,7 +917,7 @@ def page_intro():
         st.info("（尚未設定 line_search_id / MASTER_LINE_ADD）")
 
     st.markdown("---")
-    st.markdown('<div class="hero-title">想領取專屬解析？價值400元，限時免費做 10 題</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero-title">想領取專屬解析？價值1200元，限時免費做 10 題</div>', unsafe_allow_html=True)
     st.markdown('<div class="hero-subtitle">你會拿到：人格類型＋卡關點＋下一步建議</div>', unsafe_allow_html=True)
 
     name = st.text_input("如何稱呼你？", placeholder="輸入暱稱/名字", value=st.session_state.u_name)
