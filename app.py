@@ -1,6 +1,8 @@
 import ssl
 import json
 import re
+import time
+import random
 from pathlib import Path
 from collections import Counter
 from datetime import datetime, timezone, timedelta
@@ -25,7 +27,7 @@ except Exception:
 # 1) Page Config
 # =========================
 st.set_page_config(page_title="2026 AI 財富診斷", page_icon="🤖", layout="centered")
-APP_VERSION = "image-fix-002"
+APP_VERSION = "multiuser-friendly-003"
 st.sidebar.caption(f"APP_VERSION: {APP_VERSION}")
 
 
@@ -69,10 +71,29 @@ FUNNEL_TAG = str(get_qp("cl", "cl3")).strip()
 MODE = str(get_qp("mode", "A")).strip()
 
 
+def _retry(fn, *, attempts=4, base_sleep=0.5, max_sleep=3.0, name="op"):
+    """
+    簡易重試：應對 Streamlit Cloud / Google API 偶發 RemoteDisconnected / ConnectionError
+    """
+    last = None
+    for i in range(attempts):
+        try:
+            return fn()
+        except Exception as e:
+            last = e
+            if i == attempts - 1:
+                raise
+            sleep = min(max_sleep, base_sleep * (2 ** i)) + random.random() * 0.25
+            if DEBUG:
+                st.sidebar.write(f"🔁 retry({name}) {i+1}/{attempts-1} -> {type(e).__name__}: {e} (sleep {sleep:.2f}s)")
+            time.sleep(sleep)
+    raise last
+
+
 # =========================
 # 2) CSS（每次 rerun 都注入）
 # =========================
-CSS_VERSION = "2026-01-19-imgfix"
+CSS_VERSION = "2026-01-19-multiuser"
 
 st.markdown(
     f"""
@@ -318,24 +339,30 @@ SPREADSHEET_URL = (
 
 
 # =========================
-# 5) GSheets 讀寫相容封裝
+# 5) GSheets 讀寫相容封裝 + Retry
 # =========================
 def get_conn():
     return st.connection("gsheets", type=GSheetsConnection)
 
 
 def gs_read(conn, worksheet: str, ttl: int = 60):
-    try:
-        return conn.read(spreadsheet=SPREADSHEET_URL, worksheet=worksheet, ttl=ttl)
-    except TypeError:
-        return conn.read(worksheet=worksheet, ttl=ttl)
+    def _do():
+        try:
+            return conn.read(spreadsheet=SPREADSHEET_URL, worksheet=worksheet, ttl=ttl)
+        except TypeError:
+            return conn.read(worksheet=worksheet, ttl=ttl)
+
+    return _retry(_do, name=f"gs_read:{worksheet}")
 
 
 def gs_update(conn, worksheet: str, data):
-    try:
-        return conn.update(spreadsheet=SPREADSHEET_URL, worksheet=worksheet, data=data)
-    except TypeError:
-        return conn.update(worksheet=worksheet, data=data)
+    def _do():
+        try:
+            return conn.update(spreadsheet=SPREADSHEET_URL, worksheet=worksheet, data=data)
+        except TypeError:
+            return conn.update(worksheet=worksheet, data=data)
+
+    return _retry(_do, name=f"gs_update:{worksheet}")
 
 
 # =========================
@@ -348,11 +375,11 @@ _DRIVE_ID_PATTERNS = [
     r"drive\.google\.com/uc\?export=(?:view|download)&id=([^&]+)",
 ]
 
+
 def extract_drive_file_id(url: str) -> str:
     if not url:
         return ""
     s = str(url).strip()
-    # 如果只給了一串 id（沒有 http）
     if (not s.startswith("http")) and len(s) >= 20 and "/" not in s:
         return s
     for pat in _DRIVE_ID_PATTERNS:
@@ -361,10 +388,11 @@ def extract_drive_file_id(url: str) -> str:
             return m.group(1)
     return ""
 
+
 def drive_img(url: str, width: int = 1200) -> str:
     """
     把 Drive 分享連結轉成可直接顯示的圖片直連（最穩：thumbnail）
-    - Drive 常擋 HEAD，所以不要用 HEAD 去決定顯示與否
+    - Drive 常擋 HEAD，所以不要用 HEAD 去 gate
     """
     if not url or pd.isna(url):
         return ""
@@ -414,19 +442,23 @@ if DEBUG:
 
 
 # =========================
-# 7) partners
+# 7) partners（多人友善：cache_data 共用 300 秒）
 # =========================
 REQUIRED_PARTNER_COLS = {
     "ref", "name", "title", "img_url", "line_id", "line_search_id", "line_token", "password"
 }
 
 
-def load_all_partners():
+@st.cache_data(ttl=300, show_spinner=False)
+def load_all_partners_cached(spreadsheet_url: str, debug_flag: bool):
+    """
+    多人友善重點：
+    - 用 st.cache_data 讓同一台 Streamlit worker 在 300 秒內只讀一次 partners 表
+    - 讀取本身仍帶 retry，避免 Google API 偶發斷線
+    """
     conn = get_conn()
-    ttl = 0 if DEBUG else 300  # 讓 Streamlit Cloud 更快：減少讀表次數
-
-    df_m = gs_read(conn, "partners_master", ttl=ttl)
-    df_t = gs_read(conn, "partners_team", ttl=ttl)
+    df_m = gs_read(conn, "partners_master", ttl=0)
+    df_t = gs_read(conn, "partners_team", ttl=0)
 
     df_m.columns = df_m.columns.str.strip().str.lower()
     df_t.columns = df_t.columns.str.strip().str.lower()
@@ -435,12 +467,9 @@ def load_all_partners():
 
     missing = REQUIRED_PARTNER_COLS - set(df_all.columns)
     if missing:
-        st.error("❌ partners 表缺少必要欄位：")
-        st.code(", ".join(sorted(missing)))
-        st.stop()
+        raise RuntimeError(f"partners 表缺少必要欄位：{', '.join(sorted(missing))}")
 
     df_all["ref"] = df_all["ref"].astype(str).map(norm_ref)
-
     for col in ["line_search_id", "line_id", "line_token"]:
         df_all[col] = df_all[col].astype(str).str.strip()
 
@@ -459,9 +488,9 @@ def pick_partner(df_all: pd.DataFrame, ref: str) -> dict:
 
 
 try:
-    df_all = load_all_partners()
+    df_all = load_all_partners_cached(SPREADSHEET_URL, DEBUG)
 except Exception as e:
-    st.error("❌ Google Sheets 讀取失敗（請看原始錯誤）")
+    st.error("❌ Google Sheets（partners）讀取失敗")
     st.exception(e)
     st.stop()
 
@@ -472,7 +501,7 @@ partner = pick_partner(df_all, ref)
 # ✅ 直接用 thumbnail 直連（不做 HEAD gate）
 p_img = drive_img(partner.get("img_url", ""), width=800)
 
-# ✅ badge 也用 thumbnail（更穩，不會忽然失效）
+# ✅ badge 也用 thumbnail（更穩）
 BADGE_FILE_ID = "1Dz9q_hoxG4BN9YOHymw7JjqJaq5kEFGf"
 BADGE_URL = drive_img(BADGE_FILE_ID, width=200)
 
@@ -526,7 +555,7 @@ def show_partner_card():
     has_img = bool(img)
 
     ref_text = str(partner.get("ref", "")).strip()
-    ref_html = f'<div class="partner-ref">ref：{ref_text}</div>' if DEBUG and ref_text else ""
+    ref_html2 = f'<div class="partner-ref">ref：{ref_text}</div>' if DEBUG and ref_text else ""
 
     badge_html = (
         f'<img class="card-badge" src="{BADGE_URL}" alt="badge" onerror="this.style.display=\'none\';" />'
@@ -544,7 +573,7 @@ def show_partner_card():
             <div class="partner-kicker">你的專屬顧問</div>
             <div class="partner-name gold-gradient">{name}</div>
             <div class="partner-title">🎖️ {title}</div>
-            {ref_html}
+            {ref_html2}
           </div>
         </div>
         """
@@ -556,7 +585,7 @@ def show_partner_card():
             <div class="partner-kicker">你的專屬顧問</div>
             <div class="partner-name gold-gradient">{name}</div>
             <div class="partner-title">🎖️ {title}</div>
-            {ref_html}
+            {ref_html2}
           </div>
         </div>
         """
@@ -617,12 +646,15 @@ def progress_value():
 
 def render_header():
     st.markdown('<div class="hero-title">© 2026 AI 財富診斷</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hero-subtitle">10 題快速測出你的風格，價值1200元 限時免費！給你「1頁專屬解析」與下一步建議</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="hero-subtitle">10 題快速測出你的風格，價值1200元 限時免費！給你「1頁專屬解析」與下一步建議</div>',
+        unsafe_allow_html=True
+    )
     st.progress(progress_value())
 
 
 # =========================
-# 12) leads + LINE 推播
+# 12) leads + LINE 推播（多人友善：盡量用 append_row，失敗再 fallback update）
 # =========================
 def push_line(token: str, to_id: str, text: str):
     if not token or not to_id:
@@ -655,23 +687,71 @@ LEADS_COLS = [
 ]
 
 
+def _sheet_id_from_url(url: str) -> str:
+    m = re.search(r"/spreadsheets/d/([^/]+)", str(url))
+    return m.group(1) if m else ""
+
+
+def gs_append_row_best_effort(conn, worksheet: str, row_dict: dict, cols: list[str]) -> bool:
+    """
+    多人同時寫入最怕「讀-改-寫」覆蓋。
+    這裡優先嘗試用 gspread worksheet.append_row（原子性較好）。
+    若環境/權限不支援，再 fallback 到讀表 concat update。
+    """
+    values = [row_dict.get(c, "") for c in cols]
+
+    # 1) 先嘗試從 connection 拿到底層 gspread client
+    try:
+        client = getattr(conn, "client", None) or getattr(conn, "_client", None)
+        if client is None:
+            raise AttributeError("no gspread client on connection")
+
+        # open spreadsheet
+        ss = None
+        try:
+            ss = client.open_by_url(SPREADSHEET_URL)
+        except Exception:
+            sid = _sheet_id_from_url(SPREADSHEET_URL)
+            if not sid:
+                raise
+            ss = client.open_by_key(sid)
+
+        ws = ss.worksheet(worksheet)
+
+        def _do_append():
+            # USER_ENTERED 讓日期、字串更像手動輸入
+            return ws.append_row(values, value_input_option="USER_ENTERED")
+
+        _retry(_do_append, name=f"append_row:{worksheet}")
+        return True
+    except Exception as e:
+        if DEBUG:
+            st.sidebar.write(f"append_row fallback -> {type(e).__name__}: {e}")
+
+    # 2) fallback：讀取 -> concat -> update（可能覆蓋，但至少能工作）
+    try:
+        df_leads = gs_read(conn, worksheet, ttl=0 if DEBUG else 30)
+        df_leads.columns = df_leads.columns.str.strip().str.lower()
+    except Exception:
+        df_leads = pd.DataFrame(columns=cols)
+
+    for c in cols:
+        if c not in df_leads.columns:
+            df_leads[c] = ""
+
+    new_df = pd.DataFrame([row_dict]).reindex(columns=cols)
+    updated = pd.concat([df_leads, new_df], ignore_index=True).reindex(columns=cols)
+    gs_update(conn, worksheet, updated)
+    return True
+
+
 def write_lead_and_notify(primary: str, secondary: str, persona_name: str, counts: Counter, keyword: str, interest: str):
     tz = timezone(timedelta(hours=8))
     now_tw = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
 
     conn = get_conn()
 
-    try:
-        df_leads = gs_read(conn, "leads", ttl=0 if DEBUG else 30)
-        df_leads.columns = df_leads.columns.str.strip().str.lower()
-    except Exception:
-        df_leads = pd.DataFrame(columns=LEADS_COLS)
-
-    for c in LEADS_COLS:
-        if c not in df_leads.columns:
-            df_leads[c] = ""
-
-    new_lead = pd.DataFrame([{
+    row = {
         "time": now_tw,
         "ref": str(partner.get("ref", "")).strip(),
         "partner_name": partner.get("name", ""),
@@ -685,11 +765,10 @@ def write_lead_and_notify(primary: str, secondary: str, persona_name: str, count
         "keyword": keyword,
         "mode": MODE,
         "funnel": FUNNEL_TAG,
-    }])
+    }
 
-    updated = pd.concat([df_leads, new_lead], ignore_index=True)
-    updated = updated.reindex(columns=LEADS_COLS)
-    gs_update(conn, "leads", updated)
+    # ✅ 多人友善：優先 append
+    gs_append_row_best_effort(conn, "leads", row, LEADS_COLS)
 
     line_cfg = sget(st.secrets, "line", default={}) or {}
     master_token = str(line_cfg.get("channel_access_token") or st.secrets.get("LINE_CHANNEL_ACCESS_TOKEN", "")).strip()
