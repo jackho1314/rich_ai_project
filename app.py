@@ -1,5 +1,6 @@
 import ssl
 import json
+import re
 from pathlib import Path
 from collections import Counter
 from datetime import datetime, timezone, timedelta
@@ -24,7 +25,7 @@ except Exception:
 # 1) Page Config
 # =========================
 st.set_page_config(page_title="2026 AI 財富診斷", page_icon="🤖", layout="centered")
-APP_VERSION = "deploy-check-001"
+APP_VERSION = "image-fix-002"
 st.sidebar.caption(f"APP_VERSION: {APP_VERSION}")
 
 
@@ -69,9 +70,9 @@ MODE = str(get_qp("mode", "A")).strip()
 
 
 # =========================
-# 2) CSS（每次 rerun 都注入，避免按開始測驗後 CSS 消失導致跑版）
+# 2) CSS（每次 rerun 都注入）
 # =========================
-CSS_VERSION = "2026-01-16-08"
+CSS_VERSION = "2026-01-19-imgfix"
 
 st.markdown(
     f"""
@@ -86,11 +87,9 @@ st.markdown(
       --accent2:#FF4B4B;
       --font: 'Microsoft JhengHei', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
 
-      /* 全站字級（手機/電腦都放大） */
       --fs-root: clamp(18px, 0.55vw + 16px, 22px);
       --fs-caption: clamp(14px, 0.25vw + 12px, 16px);
 
-      /* 控制表單深色底（不透明，避免白底穿透） */
       --form-bg: #141423;
       --form-bg-2: #0E0E15;
       --form-border: rgba(255,255,255,0.16);
@@ -122,9 +121,6 @@ st.markdown(
       border-right: 1px solid rgba(255,255,255,0.06);
     }}
 
-    /* =========================
-       主頁 Partner Card（手機友善）
-    ========================= */
     .partner-card{{
       position: relative;
       overflow: hidden;
@@ -151,36 +147,12 @@ st.markdown(
       position: relative;
       z-index: 1;
     }}
-    .partner-meta{{
-      line-height:1.15;
-      position: relative;
-      z-index: 2;
-    }}
-    .partner-kicker{{
-      font-size: 0.85rem;
-      color:rgba(255,255,255,0.72) !important;
-      letter-spacing:0.3px;
-    }}
-    .partner-name{{
-      font-size: 1.25rem;
-      font-weight: 1000;
-      margin-top:2px;
-      text-shadow: 0 10px 26px rgba(0,0,0,0.20);
-    }}
-    .partner-title{{
-      font-size: 0.98rem;
-      color: rgba(255,255,255,0.78) !important;
-      margin-top:2px;
-    }}
-    .partner-ref{{
-      margin-top:4px;
-      font-size: 0.82rem;
-      color: rgba(255,255,255,0.65) !important;
-    }}
+    .partner-meta{{ line-height:1.15; position: relative; z-index: 2; }}
+    .partner-kicker{{ font-size: 0.85rem; color:rgba(255,255,255,0.72) !important; letter-spacing:0.3px; }}
+    .partner-name{{ font-size: 1.25rem; font-weight: 1000; margin-top:2px; text-shadow: 0 10px 26px rgba(0,0,0,0.20); }}
+    .partner-title{{ font-size: 0.98rem; color: rgba(255,255,255,0.78) !important; margin-top:2px; }}
+    .partner-ref{{ margin-top:4px; font-size: 0.82rem; color: rgba(255,255,255,0.65) !important; }}
 
-    /* =========================
-       Sidebar 海報式顧問卡
-    ========================= */
     .sb-card{{
       position: relative;
       overflow: hidden;
@@ -202,69 +174,17 @@ st.markdown(
       position: relative;
       z-index: 1;
     }}
-    .sb-kicker{{
-      font-size: 0.95rem;
-      color: rgba(255,255,255,0.74) !important;
-      letter-spacing: 0.5px;
-    }}
-    .sb-name{{
-      font-size: clamp(26px, 1.4vw + 18px, 38px);
-      font-weight: 1000;
-      line-height: 1.12;
-      margin-top: 4px;
-    }}
-    .sb-title{{
-      font-size: clamp(16px, 0.6vw + 14px, 20px);
-      color: rgba(255,255,255,0.82) !important;
-      margin-top: 6px;
-    }}
-    .sb-ref{{
-      margin-top: 10px;
-      font-size: 0.9rem;
-      color: rgba(255,255,255,0.62) !important;
-    }}
+    .sb-kicker{{ font-size: 0.95rem; color: rgba(255,255,255,0.74) !important; letter-spacing: 0.5px; }}
+    .sb-name{{ font-size: clamp(26px, 1.4vw + 18px, 38px); font-weight: 1000; line-height: 1.12; margin-top: 4px; }}
+    .sb-title{{ font-size: clamp(16px, 0.6vw + 14px, 20px); color: rgba(255,255,255,0.82) !important; margin-top: 6px; }}
+    .sb-ref{{ margin-top: 10px; font-size: 0.9rem; color: rgba(255,255,255,0.62) !important; }}
 
-    [data-testid="stSidebar"] p,
-    [data-testid="stSidebar"] span,
-    [data-testid="stSidebar"] label{{
-      font-size: 1rem !important;
-    }}
+    .hero-title{{ font-size: clamp(32px, 2.6vw, 54px); font-weight: 1000; margin: 6px 0 2px 0; letter-spacing: 0.2px; }}
+    .hero-subtitle{{ font-size: clamp(16px, 1.2vw, 22px); color: rgba(255,255,255,0.78) !important; margin: 0 0 8px 0; }}
+    .quiz-step{{ font-size: clamp(20px, 1.6vw, 28px); font-weight: 1000; margin-top: 4px; }}
+    .quiz-question{{ font-size: clamp(22px, 2.0vw, 34px); font-weight: 1000; margin: 6px 0 10px 0; }}
 
-    /* =========================
-       Hero / Quiz 字級放大
-    ========================= */
-    .hero-title{{
-      font-size: clamp(32px, 2.6vw, 54px);
-      font-weight: 1000;
-      margin: 6px 0 2px 0;
-      letter-spacing: 0.2px;
-    }}
-    .hero-subtitle{{
-      font-size: clamp(16px, 1.2vw, 22px);
-      color: rgba(255,255,255,0.78) !important;
-      margin: 0 0 8px 0;
-    }}
-    .quiz-step{{
-      font-size: clamp(20px, 1.6vw, 28px);
-      font-weight: 1000;
-      margin-top: 4px;
-    }}
-    .quiz-question{{
-      font-size: clamp(22px, 2.0vw, 34px);
-      font-weight: 1000;
-      margin: 6px 0 10px 0;
-    }}
-
-    /* =========================
-       Inputs / Select（白底白字必殺）
-    ========================= */
     html, body, .stApp{{ color-scheme: dark !important; }}
-
-    [data-testid="stTextInput"],
-    [data-testid="stTextArea"],
-    [data-testid="stSelectbox"] {{
-      background: transparent !important;
-    }}
 
     .stApp input,
     .stApp textarea {{
@@ -287,37 +207,10 @@ st.markdown(
       -webkit-text-fill-color: #fff !important;
     }}
 
-    .stApp div[data-baseweb="input"] > div,
-    .stApp div[data-baseweb="textarea"] > div {{
-      background-color: var(--form-bg) !important;
-      border: 1px solid var(--form-border) !important;
-      border-radius: 14px !important;
-    }}
-    .stApp div[data-baseweb="input"] div,
-    .stApp div[data-baseweb="textarea"] div {{
-      background-color: var(--form-bg) !important;
-    }}
-
-    .stApp input::placeholder,
-    .stApp textarea::placeholder {{
-      color: rgba(255,255,255,0.55) !important;
-      -webkit-text-fill-color: rgba(255,255,255,0.55) !important;
-    }}
-
-    .stApp [role="listbox"] {{
-      background-color: var(--form-bg-2) !important;
-      border: 1px solid rgba(255,255,255,0.12) !important;
-    }}
-    .stApp [role="option"] {{
-      color: #fff !important;
-    }}
-
-    /* progress */
     .stProgress > div > div > div > div{{
       background: linear-gradient(90deg, var(--accent), var(--accent2));
     }}
 
-    /* buttons */
     div.stButton > button{{
       background: linear-gradient(135deg, var(--accent), var(--accent2)) !important;
       color:#fff !important;
@@ -330,69 +223,25 @@ st.markdown(
       font-size: 1.05rem !important;
       font-weight: 1000 !important;
     }}
-    div.stButton > button:hover{{
-      transform: translateY(-1px) scale(1.01);
-      box-shadow: 0 18px 46px rgba(255,75,75,0.32);
-    }}
 
-    /* st.link_button 永遠可見（不需點擊才變色） */
     [data-testid="stLinkButton"] a{{
       display:flex !important;
       align-items:center !important;
       justify-content:center !important;
       gap:10px !important;
-
       width:100% !important;
       text-decoration:none !important;
-
       background: linear-gradient(135deg, var(--accent), var(--accent2)) !important;
       color:#fff !important;
-
       border-radius:14px !important;
       padding: 1.05rem 1.05rem !important;
       border: none !important;
-
       font-size: 1.05rem !important;
       font-weight: 1000 !important;
-
       box-shadow: 0 14px 35px rgba(255,75,75,0.22) !important;
       transition: 0.16s !important;
     }}
-    [data-testid="stLinkButton"] a *{{
-      color:#fff !important;
-      -webkit-text-fill-color:#fff !important;
-      fill:#fff !important;
-    }}
-    [data-testid="stLinkButton"] a:hover{{
-      transform: translateY(-1px) scale(1.01);
-      box-shadow: 0 18px 46px rgba(255,75,75,0.32) !important;
-    }}
-    [data-testid="stLinkButton"] button{{
-      background: linear-gradient(135deg, var(--accent), var(--accent2)) !important;
-      color:#fff !important;
-      border:none !important;
-    }}
 
-    /* radio option */
-    div[role="radiogroup"] > label{{
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.10);
-      padding: 14px 16px;
-      border-radius: 16px;
-      margin: 10px 0;
-    }}
-    div[role="radiogroup"] > label:hover{{
-      border-color: rgba(255,215,0,0.35);
-      background: rgba(255,215,0,0.06);
-    }}
-    div[role="radiogroup"] p,
-    div[role="radiogroup"] span{{
-      font-size: 1.05rem !important;
-      font-weight: 900 !important;
-      line-height: 1.28 !important;
-    }}
-
-    /* code */
     pre, code{{
       background: rgba(255,255,255,0.06) !important;
       color: #EEE !important;
@@ -401,7 +250,6 @@ st.markdown(
       font-size: 0.98rem !important;
     }}
 
-    /* 名字金色漸層 */
     .gold-gradient{{
       background: linear-gradient(90deg, #FFF2B8 0%, #FFD700 35%, #FFB84D 70%, #FFE9A6 100%);
       -webkit-background-clip: text;
@@ -410,7 +258,6 @@ st.markdown(
       text-shadow: 0 10px 28px rgba(255, 215, 0, 0.16);
     }}
 
-    /* 右上角徽章（永遠最上層） */
     .card-badge{{
       position: absolute;
       top: 10px;
@@ -423,20 +270,7 @@ st.markdown(
       z-index: 9999 !important;
     }}
 
-    @media (max-width: 768px){{
-      :root{{ --fs-root: 19px; }}
-      .card-badge{{ width: 36px !important; }}
-      div.stButton > button{{ padding: 1.1rem 1.05rem; }}
-      [data-testid="stLinkButton"] a{{ padding: 1.1rem 1.05rem !important; }}
-    }}
-
-    /* =========================
-       Selectbox 下拉選單（BaseWeb Popover Portal）強制深色
-       這個區塊一定要「不要加 .stApp 前綴」
-    ========================= */
-    div[data-baseweb="popover"]{{
-      z-index: 99999 !important;
-    }}
+    div[data-baseweb="popover"]{{ z-index: 99999 !important; }}
     div[data-baseweb="popover"] [role="listbox"],
     div[data-baseweb="popover"] ul{{
       background-color: var(--form-bg-2) !important;
@@ -445,32 +279,7 @@ st.markdown(
       overflow: hidden !important;
     }}
     div[data-baseweb="popover"] [role="option"],
-    div[data-baseweb="popover"] li{{
-      color: #fff !important;
-      background: transparent !important;
-    }}
-    div[data-baseweb="popover"] [role="option"] *{{
-      color: #fff !important;
-      -webkit-text-fill-color: #fff !important;
-    }}
-    div[data-baseweb="popover"] [role="option"]:hover,
-    div[data-baseweb="popover"] li:hover{{
-      background: rgba(255,255,255,0.08) !important;
-    }}
-    div[data-baseweb="popover"] [role="option"][aria-selected="true"],
-    div[data-baseweb="popover"] li[aria-selected="true"]{{
-      background: rgba(255,255,255,0.12) !important;
-    }}
-
-    div[data-baseweb="menu"]{{
-      background-color: var(--form-bg-2) !important;
-      border: 1px solid rgba(255,255,255,0.14) !important;
-      border-radius: 14px !important;
-    }}
-    div[data-baseweb="menu"] *{{
-      color:#fff !important;
-      -webkit-text-fill-color:#fff !important;
-    }}
+    div[data-baseweb="popover"] li{{ color: #fff !important; background: transparent !important; }}
     </style>
     """,
     unsafe_allow_html=True,
@@ -492,8 +301,6 @@ if "answers_map" not in st.session_state:
     st.session_state.answers_map = {}
 if "notified" not in st.session_state:
     st.session_state.notified = False
-
-# interest（必填才寫入）
 if "u_interest" not in st.session_state:
     st.session_state.u_interest = ""
 if "u_interest_other" not in st.session_state:
@@ -529,6 +336,43 @@ def gs_update(conn, worksheet: str, data):
         return conn.update(spreadsheet=SPREADSHEET_URL, worksheet=worksheet, data=data)
     except TypeError:
         return conn.update(worksheet=worksheet, data=data)
+
+
+# =========================
+# 6) Google Drive 圖片連結：最穩的做法（thumbnail）
+# =========================
+_DRIVE_ID_PATTERNS = [
+    r"/file/d/([^/]+)",
+    r"[?&]id=([^&]+)",
+    r"lh3\.googleusercontent\.com/d/([^=/?]+)",
+    r"drive\.google\.com/uc\?export=(?:view|download)&id=([^&]+)",
+]
+
+def extract_drive_file_id(url: str) -> str:
+    if not url:
+        return ""
+    s = str(url).strip()
+    # 如果只給了一串 id（沒有 http）
+    if (not s.startswith("http")) and len(s) >= 20 and "/" not in s:
+        return s
+    for pat in _DRIVE_ID_PATTERNS:
+        m = re.search(pat, s)
+        if m:
+            return m.group(1)
+    return ""
+
+def drive_img(url: str, width: int = 1200) -> str:
+    """
+    把 Drive 分享連結轉成可直接顯示的圖片直連（最穩：thumbnail）
+    - Drive 常擋 HEAD，所以不要用 HEAD 去決定顯示與否
+    """
+    if not url or pd.isna(url):
+        return ""
+    s = str(url).strip()
+    fid = extract_drive_file_id(s)
+    if fid:
+        return f"https://drive.google.com/thumbnail?id={fid}&sz=w{int(width)}"
+    return s
 
 
 # =========================
@@ -570,49 +414,16 @@ if DEBUG:
 
 
 # =========================
-# 6) partners
+# 7) partners
 # =========================
 REQUIRED_PARTNER_COLS = {
     "ref", "name", "title", "img_url", "line_id", "line_search_id", "line_token", "password"
 }
 
 
-def drive_img(url: str) -> str:
-    """把 Drive 分享連結轉成可直接顯示的圖片連結（更穩）"""
-    if not url or pd.isna(url):
-        return ""
-    s = str(url).strip()
-    if "/file/d/" in s:
-        try:
-            fid = s.split("/file/d/")[1].split("/")[0]
-            return f"https://drive.google.com/uc?export=view&id={fid}"
-        except Exception:
-            return s
-    if "open?id=" in s:
-        try:
-            fid = s.split("open?id=")[1].split("&")[0]
-            return f"https://drive.google.com/uc?export=view&id={fid}"
-        except Exception:
-            return s
-    return s
-
-
-@st.cache_data(ttl=300)
-def url_ok(url: str) -> bool:
-    """快速檢查圖片 URL 是否可讀（避免載不到導致版面炸裂）"""
-    if not url:
-        return False
-    try:
-        r = requests.head(url, timeout=3, allow_redirects=True)
-        ct = (r.headers.get("Content-Type") or "").lower()
-        return (200 <= r.status_code < 400) and ("image" in ct)
-    except Exception:
-        return False
-
-
 def load_all_partners():
     conn = get_conn()
-    ttl = 0 if DEBUG else 60
+    ttl = 0 if DEBUG else 300  # 讓 Streamlit Cloud 更快：減少讀表次數
 
     df_m = gs_read(conn, "partners_master", ttl=ttl)
     df_t = gs_read(conn, "partners_team", ttl=ttl)
@@ -658,14 +469,23 @@ except Exception as e:
 ref = norm_ref(get_qp("ref", "master"))
 partner = pick_partner(df_all, ref)
 
-p_img = drive_img(partner.get("img_url", ""))
-p_img = p_img if url_ok(p_img) else ""
+# ✅ 直接用 thumbnail 直連（不做 HEAD gate）
+p_img = drive_img(partner.get("img_url", ""), width=800)
 
-BADGE_URL = "https://lh3.googleusercontent.com/d/1Dz9q_hoxG4BN9YOHymw7JjqJaq5kEFGf"
+# ✅ badge 也用 thumbnail（更穩，不會忽然失效）
+BADGE_FILE_ID = "1Dz9q_hoxG4BN9YOHymw7JjqJaq5kEFGf"
+BADGE_URL = drive_img(BADGE_FILE_ID, width=200)
+
+if DEBUG:
+    st.sidebar.write("---")
+    st.sidebar.subheader("🖼️ Image Debug")
+    st.sidebar.write("img_url(raw):", str(partner.get("img_url", "")))
+    st.sidebar.write("img_url(final):", p_img)
+    st.sidebar.write("badge(final):", BADGE_URL)
 
 
 # =========================
-# 7) Sidebar（海報式顧問卡 + 徽章）
+# 8) Sidebar（海報式顧問卡 + 徽章）
 # =========================
 st.sidebar.write("---")
 
@@ -673,13 +493,17 @@ sb_name = str(partner.get("name", "")).strip()
 sb_title = str(partner.get("title", "")).strip()
 sb_ref = str(partner.get("ref", "")).strip()
 
-img_html = f'<img class="sb-img" src="{p_img}" alt="partner" />' if p_img else ""
+img_html = (
+    f'<img class="sb-img" src="{p_img}" alt="partner" loading="lazy" '
+    f'onerror="this.style.display=\'none\';" />'
+    if p_img else ""
+)
 ref_html = f'<div class="sb-ref">ref：{sb_ref}</div>' if DEBUG and sb_ref else ""
 
 st.sidebar.markdown(
     f"""
     <div class="sb-card">
-      <img class="card-badge" src="{BADGE_URL}" alt="badge" />
+      <img class="card-badge" src="{BADGE_URL}" alt="badge" onerror="this.style.display='none';" />
       {img_html}
       <div class="sb-kicker">你的專屬顧問</div>
       <div class="sb-name gold-gradient">{sb_name}</div>
@@ -692,7 +516,7 @@ st.sidebar.markdown(
 
 
 # =========================
-# 7.5) 主要頁面顧問卡（安全版）＋徽章
+# 9) 主要頁面顧問卡（安全版）＋徽章
 # =========================
 def show_partner_card():
     name = str(partner.get("name", "")).strip()
@@ -704,13 +528,17 @@ def show_partner_card():
     ref_text = str(partner.get("ref", "")).strip()
     ref_html = f'<div class="partner-ref">ref：{ref_text}</div>' if DEBUG and ref_text else ""
 
-    badge_html = f'<img class="card-badge" src="{BADGE_URL}" alt="badge" />' if BADGE_URL else ""
+    badge_html = (
+        f'<img class="card-badge" src="{BADGE_URL}" alt="badge" onerror="this.style.display=\'none\';" />'
+        if BADGE_URL else ""
+    )
 
     if has_img:
         html = f"""
         <div class="partner-card">
           {badge_html}
           <img class="partner-img" src="{img}" alt="partner" loading="lazy"
+               onerror="this.style.display='none';"
                style="width:56px;height:56px;max-width:56px;max-height:56px;object-fit:cover;border-radius:16px;" />
           <div class="partner-meta">
             <div class="partner-kicker">你的專屬顧問</div>
@@ -736,17 +564,12 @@ def show_partner_card():
 
 
 # =========================
-# 8) 題庫 / 文案
+# 10) 題庫 / 文案
 # =========================
 questions = [
     ("① AI 起風了，你會？", [("🚀 先衝先卡位", "A"), ("🧠 先做一套方法", "B"), ("🤝 先找對的人一起", "C"), ("🛡️ 先確認不會翻車", "D")]),
     ("② 你想要的「有錢」是？", [("✨ 人生自由選擇", "A"), ("💤 睡覺也進帳", "B"), ("❤️ 顧家也能助人", "C"), ("🏦 穩穩變富安心", "D")]),
-    ("③ 機會來了，你會？", [
-        ("⚡ 先出手再優化", "A"),
-        ("📊 先算勝率再做", "B"),
-        ("👥 先組隊再放大", "C"),
-        ("🧯 先看最壞情況", "D")
-    ]),
+    ("③ 機會來了，你會？", [("⚡ 先出手再優化", "A"), ("📊 先算勝率再做", "B"), ("👥 先組隊再放大", "C"), ("🧯 先看最壞情況", "D")]),
     ("④ 你的天賦底牌是？", [("🧭 抓趨勢定方向", "A"), ("🧩 拆解系統化", "B"), ("🌿 連結信任感", "C"), ("🧱 穩住抗風險", "D")]),
     ("⑤ 你最受不了的是？", [("🐢 慢到錯過風口", "A"), ("🌀 沒邏輯亂做", "B"), ("🧊 冷冰冰沒連結", "C"), ("🎢 太冒險不穩", "D")]),
     ("⑥ 你下決策最靠？", [("🔮 趨勢直覺", "A"), ("🧾 數據計算", "B"), ("🫶 圈層建議", "C"), ("📌 穩定經驗", "D")]),
@@ -765,10 +588,10 @@ DB_P = {
 }
 
 COPY = {
-    "A": {"id":"你是領航型：越亂你越敢先走第一步。","pain":"你最容易被「雜務＋反覆溝通」拖慢，忙到沒時間做真正的佈局。","hook":"你會需要「引流自動化」：先把人流聚起來，讓你只做高價值決策與帶隊。","cta":"A1","traits":["快狠準","敢賭敢試","帶頭衝第一波"],"blind":"太快＝容易分心/分散","next":"把引流交給系統，你只要挑對的人。"},
-    "B": {"id":"你是軍師型：你不是靠熱血，你靠方法。","pain":"流程不一致、資料分散，會讓你的方法「無法複製放大」。","hook":"你會喜歡「一套可複製 SOP」：陌生人→分類→交棒，全流程模板化。","cta":"B1","traits":["系統控","會拆解","重視可驗證"],"blind":"想太久＝容易慢半拍","next":"先套模板跑起來，再慢慢優化到極致。"},
-    "C": {"id":"你是社群型：你一開口，人就願意靠近你。","pain":"你常卡在：要顧很多人、要產內容、要維持熱度，最後累到轉化不成比例。","hook":"你會需要「先分層再陪伴」：漏斗把人分類，你只把力氣用在對的人。","cta":"C1","traits":["高共感","會經營","信任感強"],"blind":"太在乎＝容易耗能/內耗","next":"先分層再陪伴，關係會更穩、更有效。"},
-    "D": {"id":"你是守護型：你不求快，你求穩且不翻車。","pain":"資訊太雜、風險不清楚，你就會寧可慢也不敢衝。","hook":"你會喜歡「透明可控」：流程每一步都看得懂，覺得安全才敢放大。","cta":"D1","traits":["穩健","可靠","風險意識強"],"blind":"太保守＝容易錯過窗口","next":"用安全版本先跑一輪，你會越來越敢放大。"},
+    "A": {"id": "你是領航型：越亂你越敢先走第一步。", "pain": "你最容易被「雜務＋反覆溝通」拖慢，忙到沒時間做真正的佈局。", "hook": "你會需要「引流自動化」：先把人流聚起來，讓你只做高價值決策與帶隊。", "cta": "A1", "traits": ["快狠準", "敢賭敢試", "帶頭衝第一波"], "blind": "太快＝容易分心/分散", "next": "把引流交給系統，你只要挑對的人。"},
+    "B": {"id": "你是軍師型：你不是靠熱血，你靠方法。", "pain": "流程不一致、資料分散，會讓你的方法「無法複製放大」。", "hook": "你會喜歡「一套可複製 SOP」：陌生人→分類→交棒，全流程模板化。", "cta": "B1", "traits": ["系統控", "會拆解", "重視可驗證"], "blind": "想太久＝容易慢半拍", "next": "先套模板跑起來，再慢慢優化到極致。"},
+    "C": {"id": "你是社群型：你一開口，人就願意靠近你。", "pain": "你常卡在：要顧很多人、要產內容、要維持熱度，最後累到轉化不成比例。", "hook": "你會需要「先分層再陪伴」：漏斗把人分類，你只把力氣用在對的人。", "cta": "C1", "traits": ["高共感", "會經營", "信任感強"], "blind": "太在乎＝容易耗能/內耗", "next": "先分層再陪伴，關係會更穩、更有效。"},
+    "D": {"id": "你是守護型：你不求快，你求穩且不翻車。", "pain": "資訊太雜、風險不清楚，你就會寧可慢也不敢衝。", "hook": "你會喜歡「透明可控」：流程每一步都看得懂，覺得安全才敢放大。", "cta": "D1", "traits": ["穩健", "可靠", "風險意識強"], "blind": "太保守＝容易錯過窗口", "next": "用安全版本先跑一輪，你會越來越敢放大。"},
 }
 
 INTEREST_OPTIONS = [
@@ -782,7 +605,7 @@ INTEREST_PLACEHOLDER = "請選擇（必填）"
 
 
 # =========================
-# 9) Header / Progress
+# 11) Header / Progress
 # =========================
 def progress_value():
     if st.session_state.page == "intro":
@@ -794,12 +617,12 @@ def progress_value():
 
 def render_header():
     st.markdown('<div class="hero-title">© 2026 AI 財富診斷</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hero-subtitle">「價值1200元限時免費」10 題快速測出你的風格，給你「1頁專屬解析」與下一步建議</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero-subtitle">10 題快速測出你的風格，價值1200元 限時免費！給你「1頁專屬解析」與下一步建議</div>', unsafe_allow_html=True)
     st.progress(progress_value())
 
 
 # =========================
-# 10) leads + LINE 推播
+# 12) leads + LINE 推播
 # =========================
 def push_line(token: str, to_id: str, text: str):
     if not token or not to_id:
@@ -844,15 +667,14 @@ def write_lead_and_notify(primary: str, secondary: str, persona_name: str, count
     except Exception:
         df_leads = pd.DataFrame(columns=LEADS_COLS)
 
-    # 確保欄位存在（缺就補）
     for c in LEADS_COLS:
         if c not in df_leads.columns:
             df_leads[c] = ""
 
     new_lead = pd.DataFrame([{
         "time": now_tw,
-        "ref": str(partner.get("ref","")).strip(),
-        "partner_name": partner.get("name",""),
+        "ref": str(partner.get("ref", "")).strip(),
+        "partner_name": partner.get("name", ""),
         "client_name": st.session_state.u_name,
         "client_job": st.session_state.u_domain,
         "interest": interest,
@@ -866,15 +688,12 @@ def write_lead_and_notify(primary: str, secondary: str, persona_name: str, count
     }])
 
     updated = pd.concat([df_leads, new_lead], ignore_index=True)
-
-    # 依你指定順序輸出（避免欄位亂掉）
     updated = updated.reindex(columns=LEADS_COLS)
-
     gs_update(conn, "leads", updated)
 
     line_cfg = sget(st.secrets, "line", default={}) or {}
-    master_token = str(line_cfg.get("channel_access_token") or st.secrets.get("LINE_CHANNEL_ACCESS_TOKEN","")).strip()
-    master_to_id = str(line_cfg.get("user_id") or st.secrets.get("LINE_USER_ID","")).strip()
+    master_token = str(line_cfg.get("channel_access_token") or st.secrets.get("LINE_CHANNEL_ACCESS_TOKEN", "")).strip()
+    master_to_id = str(line_cfg.get("user_id") or st.secrets.get("LINE_USER_ID", "")).strip()
 
     partner_token = str(partner.get("line_token") or "").strip()
     partner_to_id = str(partner.get("line_id") or "").strip()
@@ -886,7 +705,7 @@ def write_lead_and_notify(primary: str, secondary: str, persona_name: str, count
         f"🧩 類型：{primary}{('/'+secondary) if secondary else ''}  {persona_name}\n"
         f"🧷 關鍵字：{keyword}\n"
         f"💼 狀態：{st.session_state.u_domain}\n"
-        f"🔗 ref：{partner.get('ref','')}"
+        f"🔗 ref：{partner.get('ref', '')}"
     )
 
     push_line(master_token, master_to_id, msg)
@@ -897,7 +716,6 @@ def write_lead_and_notify(primary: str, secondary: str, persona_name: str, count
 # Pages
 # =========================
 def page_intro():
-    # Intro：顧問卡 → 超大「立即加 LINE」→ 再往下才是測驗
     show_partner_card()
     render_header()
 
@@ -910,18 +728,16 @@ def page_intro():
             line_url = f"https://line.me/R/ti/p/{line_sid}"
         else:
             line_url = f"https://line.me/ti/p/~{line_sid}"
-
         st.link_button("💬 立即加 LINE", line_url)
         st.caption("（加 LINE 後可領取專屬解析與活動資訊）")
     else:
         st.info("（尚未設定 line_search_id / MASTER_LINE_ADD）")
 
     st.markdown("---")
-    st.markdown('<div class="hero-title">想領取專屬解析？價值1200元，限時免費做 10 題</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero-title">價值1200元，限時免費！想領取專屬解析？做 10 題</div>', unsafe_allow_html=True)
     st.markdown('<div class="hero-subtitle">你會拿到：人格類型＋卡關點＋下一步建議</div>', unsafe_allow_html=True)
 
     name = st.text_input("如何稱呼你？", placeholder="輸入暱稱/名字", value=st.session_state.u_name)
-
     domains = ["想增加收入", "想轉型/第二收入", "想建立團隊", "想更懂AI工具", "其他"]
     default_idx = domains.index(st.session_state.u_domain) if st.session_state.u_domain in domains else 0
     domain = st.selectbox("你現在的狀態比較像？", domains, index=default_idx)
@@ -984,11 +800,10 @@ def page_quiz():
 
 
 def _interest_default_index():
-    # 讓既有值可以回填
     cur = str(st.session_state.u_interest or "").strip()
     if not cur:
         return 0
-    if cur.startswith("其他：") or cur.startswith("其他:") or cur.startswith("其他"):
+    if cur.startswith("其他"):
         return 1 + INTEREST_OPTIONS.index("其他（可填）")
     if cur in INTEREST_OPTIONS:
         return 1 + INTEREST_OPTIONS.index(cur)
@@ -1029,10 +844,7 @@ def page_result():
     CTA_KEYWORD = copy.get("cta", "R1")
 
     st.balloons()
-    st.markdown(
-        f'<div class="hero-title">{st.session_state.u_name} 的測驗結果</div>',
-        unsafe_allow_html=True
-    )
+    st.markdown(f'<div class="hero-title">{st.session_state.u_name} 的測驗結果</div>', unsafe_allow_html=True)
     st.markdown(f"### 類型：**{persona_name}**")
     st.caption("特質： " + "｜".join(copy["traits"]))
 
@@ -1176,7 +988,7 @@ def sidebar_admin_panel():
             st.dataframe(all_leads, use_container_width=True)
 
         elif partner_pwd and str(pwd) == partner_pwd:
-            st.subheader(f"📈 {partner.get('name','')} 的個人名單")
+            st.subheader(f"📈 {partner.get('name', '')} 的個人名單")
             mask = all_leads["ref"].astype(str).map(norm_ref) == norm_ref(partner_ref)
             st.dataframe(all_leads[mask], use_container_width=True)
 
