@@ -3,10 +3,10 @@ import json
 import re
 import time
 import random
-import urllib.parse
 from pathlib import Path
 from collections import Counter
 from datetime import datetime, timezone, timedelta
+from urllib.parse import urlencode, urlparse, parse_qsl, urlunparse
 
 import requests
 import pandas as pd
@@ -28,7 +28,7 @@ except Exception:
 # 1) Page Config
 # =========================
 st.set_page_config(page_title="2026 AI 財富診斷", page_icon="🤖", layout="centered")
-APP_VERSION = "multiuser-friendly-005-double-leads-linefix"
+APP_VERSION = "multiuser-friendly-ua-smart-doubleleads-v1"
 st.sidebar.caption(f"APP_VERSION: {APP_VERSION}")
 
 
@@ -73,9 +73,7 @@ MODE = str(get_qp("mode", "A")).strip()
 
 
 def _retry(fn, *, attempts=4, base_sleep=0.5, max_sleep=3.0, name="op"):
-    """
-    簡易重試：應對 Streamlit Cloud / Google API 偶發 RemoteDisconnected / ConnectionError
-    """
+    """簡易重試：應對 Google API 偶發 RemoteDisconnected / ConnectionError"""
     last = None
     for i in range(attempts):
         try:
@@ -86,284 +84,317 @@ def _retry(fn, *, attempts=4, base_sleep=0.5, max_sleep=3.0, name="op"):
                 raise
             sleep = min(max_sleep, base_sleep * (2 ** i)) + random.random() * 0.25
             if DEBUG:
-                st.sidebar.write(f"🔁 retry({name}) {i+1}/{attempts-1} -> {type(e).__name__}: {e} (sleep {sleep:.2f}s)")
+                st.sidebar.write(
+                    f"🔁 retry({name}) {i+1}/{attempts-1} -> {type(e).__name__}: {e} (sleep {sleep:.2f}s)"
+                )
             time.sleep(sleep)
     raise last
 
 
-# =========================
-# LINE link helpers（解決 LINE 內掃描點不開）
-# =========================
-def _add_query(url: str, k: str, v: str) -> str:
+def add_query(url: str, **params) -> str:
+    """安全加 query params（保留原本 query）"""
     if not url:
+        return ""
+    try:
+        p = urlparse(url)
+        q = dict(parse_qsl(p.query, keep_blank_values=True))
+        q.update({k: v for k, v in params.items() if v is not None and v != ""})
+        new_q = urlencode(q, doseq=True)
+        return urlunparse((p.scheme, p.netloc, p.path, p.params, new_q, p.fragment))
+    except Exception:
         return url
-    joiner = "&" if "?" in url else "?"
-    return f"{url}{joiner}{urllib.parse.quote(k)}={urllib.parse.quote(v)}"
 
 
-def build_line_links(line_id_or_url: str) -> dict:
+# =========================
+# 2) UA 注入（一次性）
+# =========================
+def inject_ua_once():
     """
-    將輸入（line_search_id / line_add_url / 直接網址）轉成可用連結集合
-    回傳欄位：
-      - add_url: 加好友/加入（優先）
-      - chat_url: 開啟聊天（若可）
-      - add_url_external: 強制外部瀏覽器（LINE 內建瀏覽器較穩）
-      - fallback_url: 原始網址（若輸入已是 URL）
-    規則：
-      - 以 '@' 開頭：視為 OA（官方帳號）-> https://line.me/R/ti/p/@xxx（加好友） + oaMessage（開聊天）
-      - 以 'http' 開頭：視為完整網址，直接當 fallback_url
-      - 其他（例如 'bioho'）：視為個人 ID -> https://line.me/ti/p/~bioho（加好友）
+    Streamlit 伺服器端拿不到 UA，改用 JS 把 UA 塞進 query param ?ua=...
+    只會自動 reload 一次（避免無限循環）
     """
-    s = str(line_id_or_url or "").strip()
-    if not s:
-        return {"add_url": "", "chat_url": "", "add_url_external": "", "fallback_url": ""}
+    ua = str(get_qp("ua", "") or "")
+    if ua.strip():
+        return
+    if str(get_qp("ua_set", "0")) == "1":
+        return
 
-    # 如果已經是 URL
-    if s.startswith("http://") or s.startswith("https://"):
-        add_url = s
-        fallback = s
-        # 盡量提供「外部瀏覽器」版本
-        if "openExternalBrowser=1" in s:
-            add_ext = s
-        else:
-            sep = "&" if ("?" in s) else "?"
-            add_ext = f"{s}{sep}openExternalBrowser=1"
-        return {"add_url": add_url, "chat_url": "", "add_url_external": add_ext, "fallback_url": fallback}
-
-    # OA（官方帳號）
-    if s.startswith("@"):
-        oa = s
-        add_url = f"https://line.me/R/ti/p/{oa}"  # 加好友
-        chat_url = f"https://line.me/R/oaMessage/{urllib.parse.quote(oa)}/?hi"  # 開聊天（可選）
-        add_ext = f"{add_url}?openExternalBrowser=1"
-        return {"add_url": add_url, "chat_url": chat_url, "add_url_external": add_ext, "fallback_url": ""}
-
-    # 個人 ID（例如 bioho）
-    pid = s
-    add_url = f"https://line.me/ti/p/~{pid}"
-    add_ext = f"{add_url}?openExternalBrowser=1"
-    return {"add_url": add_url, "chat_url": "", "add_url_external": add_ext, "fallback_url": ""}
+    components.html(
+        """
+        <script>
+          (function(){
+            try{
+              const ua = navigator.userAgent || "";
+              const url = new URL(window.location.href);
+              if(!url.searchParams.get("ua")){
+                url.searchParams.set("ua", ua);
+                url.searchParams.set("ua_set", "1");
+                window.location.replace(url.toString());
+              }
+            }catch(e){}
+          })();
+        </script>
+        """,
+        height=0,
+    )
 
 
-# =========================
-# 2) CSS（每次 rerun 都注入）
-# =========================
-CSS_VERSION = "2026-01-21-linefix"
-
-st.markdown(
-    f"""
-    <style>
-    /* CSS_VERSION:{CSS_VERSION} */
-    :root{{
-      --bg0:#0B0B10;
-      --bg2:#1B1B28;
-      --gold:#FFD700;
-      --muted:#B8B8C6;
-      --accent:#D3544E;
-      --accent2:#FF4B4B;
-      --font: 'Microsoft JhengHei', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-
-      --fs-root: clamp(18px, 0.55vw + 16px, 22px);
-      --fs-caption: clamp(14px, 0.25vw + 12px, 16px);
-
-      --form-bg: #141423;
-      --form-bg-2: #0E0E15;
-      --form-border: rgba(255,255,255,0.16);
-    }}
-
-    html{{ font-size: var(--fs-root) !important; }}
-    body, .stApp{{ font-size: 1rem !important; }}
-    *{{ font-family: var(--font) !important; }}
-
-    .stApp{{
-      background:
-        radial-gradient(1200px 600px at 70% 15%, rgba(255,215,0,0.10), transparent 60%),
-        radial-gradient(900px 500px at 20% 30%, rgba(255,75,75,0.10), transparent 60%),
-        linear-gradient(135deg, var(--bg0), var(--bg2));
-    }}
-    h1,h2,h3,p,div,span,label{{ color:#fff !important; }}
-    p, li{{ line-height: 1.55 !important; }}
-    .muted{{ color: var(--muted) !important; }}
-
-    [data-testid="stCaptionContainer"] *{{
-      font-size: var(--fs-caption) !important;
-      color: rgba(255,255,255,0.72) !important;
-    }}
-
-    [data-testid="stSidebar"]{{
-      background:
-        radial-gradient(900px 500px at 30% 20%, rgba(255,215,0,0.08), transparent 60%),
-        linear-gradient(180deg, #0E0E15, #0B0B10);
-      border-right: 1px solid rgba(255,255,255,0.06);
-    }}
-
-    .partner-card{{
-      position: relative;
-      overflow: hidden;
-      display:flex !important;
-      flex-direction: row !important;
-      align-items:center !important;
-      gap:12px !important;
-      padding:12px 14px;
-      border-radius:18px;
-      border:1px solid rgba(255,255,255,0.10);
-      background: rgba(255,255,255,0.05);
-      box-shadow: 0 10px 25px rgba(0,0,0,0.22);
-      margin: 6px 0 12px 0;
-    }}
-    .partner-img{{
-      width:56px !important;
-      height:56px !important;
-      max-width:56px !important;
-      max-height:56px !important;
-      border-radius:16px !important;
-      object-fit:cover !important;
-      border:1px solid rgba(255,215,0,0.25);
-      flex: 0 0 auto;
-      position: relative;
-      z-index: 1;
-    }}
-    .partner-meta{{ line-height:1.15; position: relative; z-index: 2; }}
-    .partner-kicker{{ font-size: 0.85rem; color:rgba(255,255,255,0.72) !important; letter-spacing:0.3px; }}
-    .partner-name{{ font-size: 1.25rem; font-weight: 1000; margin-top:2px; text-shadow: 0 10px 26px rgba(0,0,0,0.20); }}
-    .partner-title{{ font-size: 0.98rem; color: rgba(255,255,255,0.78) !important; margin-top:2px; }}
-    .partner-ref{{ margin-top:4px; font-size: 0.82rem; color: rgba(255,255,255,0.65) !important; }}
-
-    .sb-card{{
-      position: relative;
-      overflow: hidden;
-      padding: 16px 14px;
-      border-radius: 22px;
-      border: 1px solid rgba(255,255,255,0.10);
-      background: rgba(255,255,255,0.05);
-      box-shadow: 0 14px 35px rgba(0,0,0,0.28);
-      margin-top: 10px;
-    }}
-    .sb-img{{
-      width: 100%;
-      max-width: 180px !important;
-      border-radius: 18px;
-      object-fit: cover;
-      border: 1px solid rgba(255,215,0,0.22);
-      display: block;
-      margin: 0 auto 12px auto;
-      position: relative;
-      z-index: 1;
-    }}
-    .sb-kicker{{ font-size: 0.95rem; color: rgba(255,255,255,0.74) !important; letter-spacing: 0.5px; }}
-    .sb-name{{ font-size: clamp(26px, 1.4vw + 18px, 38px); font-weight: 1000; line-height: 1.12; margin-top: 4px; }}
-    .sb-title{{ font-size: clamp(16px, 0.6vw + 14px, 20px); color: rgba(255,255,255,0.82) !important; margin-top: 6px; }}
-    .sb-ref{{ margin-top: 10px; font-size: 0.9rem; color: rgba(255,255,255,0.62) !important; }}
-
-    .hero-title{{ font-size: clamp(32px, 2.6vw, 54px); font-weight: 1000; margin: 6px 0 2px 0; letter-spacing: 0.2px; }}
-    .hero-subtitle{{ font-size: clamp(16px, 1.2vw, 22px); color: rgba(255,255,255,0.78) !important; margin: 0 0 8px 0; }}
-    .quiz-step{{ font-size: clamp(20px, 1.6vw, 28px); font-weight: 1000; margin-top: 4px; }}
-    .quiz-question{{ font-size: clamp(22px, 2.0vw, 34px); font-weight: 1000; margin: 6px 0 10px 0; }}
-
-    html, body, .stApp{{ color-scheme: dark !important; }}
-
-    .stApp input,
-    .stApp textarea {{
-      background-color: var(--form-bg) !important;
-      color: #fff !important;
-      -webkit-text-fill-color: #fff !important;
-      caret-color: #fff !important;
-      border: 1px solid var(--form-border) !important;
-      border-radius: 14px !important;
-      outline: none !important;
-    }}
-
-    .stApp div[data-baseweb="select"] > div {{
-      background-color: var(--form-bg) !important;
-      border: 1px solid var(--form-border) !important;
-      border-radius: 14px !important;
-    }}
-    .stApp div[data-baseweb="select"] * {{
-      color: #fff !important;
-      -webkit-text-fill-color: #fff !important;
-    }}
-
-    .stProgress > div > div > div > div{{
-      background: linear-gradient(90deg, var(--accent), var(--accent2));
-    }}
-
-    div.stButton > button{{
-      background: linear-gradient(135deg, var(--accent), var(--accent2)) !important;
-      color:#fff !important;
-      border-radius: 14px;
-      width: 100%;
-      border: none;
-      padding: 1.05rem 1.05rem;
-      box-shadow: 0 14px 35px rgba(255,75,75,0.22);
-      transition: 0.16s;
-      font-size: 1.05rem !important;
-      font-weight: 1000 !important;
-    }}
-
-    [data-testid="stLinkButton"] a{{
-      display:flex !important;
-      align-items:center !important;
-      justify-content:center !important;
-      gap:10px !important;
-      width:100% !important;
-      text-decoration:none !important;
-      background: linear-gradient(135deg, var(--accent), var(--accent2)) !important;
-      color:#fff !important;
-      border-radius:14px !important;
-      padding: 1.05rem 1.05rem !important;
-      border: none !important;
-      font-size: 1.05rem !important;
-      font-weight: 1000 !important;
-      box-shadow: 0 14px 35px rgba(255,75,75,0.22) !important;
-      transition: 0.16s !important;
-    }}
-
-    pre, code{{
-      background: rgba(255,255,255,0.06) !important;
-      color: #EEE !important;
-      border: 1px solid rgba(255,255,255,0.10) !important;
-      border-radius: 14px !important;
-      font-size: 0.98rem !important;
-    }}
-
-    .gold-gradient{{
-      background: linear-gradient(90deg, #FFF2B8 0%, #FFD700 35%, #FFB84D 70%, #FFE9A6 100%);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent !important;
-      text-shadow: 0 10px 28px rgba(255, 215, 0, 0.16);
-    }}
-
-    .card-badge{{
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      width: clamp(22px, 0.9vw + 14px, 32px) !important;
-      height: auto;
-      opacity: 0.98;
-      filter: drop-shadow(0 10px 22px rgba(255,215,0,0.18));
-      pointer-events: none;
-      z-index: 9999 !important;
-    }}
-
-    div[data-baseweb="popover"]{{ z-index: 99999 !important; }}
-    div[data-baseweb="popover"] [role="listbox"],
-    div[data-baseweb="popover"] ul{{
-      background-color: var(--form-bg-2) !important;
-      border: 1px solid rgba(255,255,255,0.14) !important;
-      border-radius: 14px !important;
-      overflow: hidden !important;
-    }}
-    div[data-baseweb="popover"] [role="option"],
-    div[data-baseweb="popover"] li{{ color: #fff !important; background: transparent !important; }}
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+inject_ua_once()
+UA = str(get_qp("ua", "") or "")
+UA_L = UA.lower()
+IS_LINE_INAPP = (" line/" in UA_L) or ("liff" in UA_L) or ("linecorp" in UA_L)
+IS_ANDROID = "android" in UA_L
+IS_IOS = ("iphone" in UA_L) or ("ipad" in UA_L) or ("ipod" in UA_L)
 
 
 # =========================
-# 3) Session State
+# 3) CSS（每次 rerun 都注入）— 不用 f-string，避免大括號踩雷
+# =========================
+CSS_VERSION = "2026-01-22-line-cta-smart"
+CSS = r"""
+:root{
+  --bg0:#0B0B10;
+  --bg2:#1B1B28;
+  --gold:#FFD700;
+  --muted:#B8B8C6;
+  --accent:#D3544E;
+  --accent2:#FF4B4B;
+  --font: 'Microsoft JhengHei', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+
+  --fs-root: clamp(18px, 0.55vw + 16px, 22px);
+  --fs-caption: clamp(14px, 0.25vw + 12px, 16px);
+
+  --form-bg: #141423;
+  --form-bg-2: #0E0E15;
+  --form-border: rgba(255,255,255,0.16);
+}
+
+html{ font-size: var(--fs-root) !important; }
+body, .stApp{ font-size: 1rem !important; }
+*{ font-family: var(--font) !important; }
+
+.stApp{
+  background:
+    radial-gradient(1200px 600px at 70% 15%, rgba(255,215,0,0.10), transparent 60%),
+    radial-gradient(900px 500px at 20% 30%, rgba(255,75,75,0.10), transparent 60%),
+    linear-gradient(135deg, var(--bg0), var(--bg2));
+}
+h1,h2,h3,p,div,span,label{ color:#fff !important; }
+p, li{ line-height: 1.55 !important; }
+.muted{ color: var(--muted) !important; }
+
+[data-testid="stCaptionContainer"] *{
+  font-size: var(--fs-caption) !important;
+  color: rgba(255,255,255,0.72) !important;
+}
+
+[data-testid="stSidebar"]{
+  background:
+    radial-gradient(900px 500px at 30% 20%, rgba(255,215,0,0.08), transparent 60%),
+    linear-gradient(180deg, #0E0E15, #0B0B10);
+  border-right: 1px solid rgba(255,255,255,0.06);
+}
+
+.partner-card{
+  position: relative;
+  overflow: hidden;
+  display:flex !important;
+  flex-direction: row !important;
+  align-items:center !important;
+  gap:12px !important;
+  padding:12px 14px;
+  border-radius:18px;
+  border:1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.05);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.22);
+  margin: 6px 0 12px 0;
+}
+.partner-img{
+  width:56px !important;
+  height:56px !important;
+  max-width:56px !important;
+  max-height:56px !important;
+  border-radius:16px !important;
+  object-fit:cover !important;
+  border:1px solid rgba(255,215,0,0.25);
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 1;
+}
+.partner-meta{ line-height:1.15; position: relative; z-index: 2; }
+.partner-kicker{ font-size: 0.85rem; color:rgba(255,255,255,0.72) !important; letter-spacing:0.3px; }
+.partner-name{ font-size: 1.25rem; font-weight: 1000; margin-top:2px; text-shadow: 0 10px 26px rgba(0,0,0,0.20); }
+.partner-title{ font-size: 0.98rem; color: rgba(255,255,255,0.78) !important; margin-top:2px; }
+.partner-ref{ margin-top:4px; font-size: 0.82rem; color: rgba(255,255,255,0.65) !important; }
+
+.sb-card{
+  position: relative;
+  overflow: hidden;
+  padding: 16px 14px;
+  border-radius: 22px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.05);
+  box-shadow: 0 14px 35px rgba(0,0,0,0.28);
+  margin-top: 10px;
+}
+.sb-img{
+  width: 100%;
+  max-width: 180px !important;
+  border-radius: 18px;
+  object-fit: cover;
+  border: 1px solid rgba(255,215,0,0.22);
+  display: block;
+  margin: 0 auto 12px auto;
+  position: relative;
+  z-index: 1;
+}
+.sb-kicker{ font-size: 0.95rem; color: rgba(255,255,255,0.74) !important; letter-spacing: 0.5px; }
+.sb-name{ font-size: clamp(26px, 1.4vw + 18px, 38px); font-weight: 1000; line-height: 1.12; margin-top: 4px; }
+.sb-title{ font-size: clamp(16px, 0.6vw + 14px, 20px); color: rgba(255,255,255,0.82) !important; margin-top: 6px; }
+.sb-ref{ margin-top: 10px; font-size: 0.9rem; color: rgba(255,255,255,0.62) !important; }
+
+.hero-title{ font-size: clamp(32px, 2.6vw, 54px); font-weight: 1000; margin: 6px 0 2px 0; letter-spacing: 0.2px; }
+.hero-subtitle{ font-size: clamp(16px, 1.2vw, 22px); color: rgba(255,255,255,0.78) !important; margin: 0 0 8px 0; }
+.quiz-step{ font-size: clamp(20px, 1.6vw, 28px); font-weight: 1000; margin-top: 4px; }
+.quiz-question{ font-size: clamp(22px, 2.0vw, 34px); font-weight: 1000; margin: 6px 0 10px 0; }
+
+html, body, .stApp{ color-scheme: dark !important; }
+
+.stApp input,
+.stApp textarea{
+  background-color: var(--form-bg) !important;
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+  caret-color: #fff !important;
+  border: 1px solid var(--form-border) !important;
+  border-radius: 14px !important;
+  outline: none !important;
+}
+
+.stApp div[data-baseweb="select"] > div{
+  background-color: var(--form-bg) !important;
+  border: 1px solid var(--form-border) !important;
+  border-radius: 14px !important;
+}
+.stApp div[data-baseweb="select"] *{
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+}
+
+.stProgress > div > div > div > div{
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+}
+
+div.stButton > button{
+  background: linear-gradient(135deg, var(--accent), var(--accent2)) !important;
+  color:#fff !important;
+  border-radius: 14px;
+  width: 100%;
+  border: none;
+  padding: 1.05rem 1.05rem;
+  box-shadow: 0 14px 35px rgba(255,75,75,0.22);
+  transition: 0.16s;
+  font-size: 1.05rem !important;
+  font-weight: 1000 !important;
+}
+
+[data-testid="stLinkButton"] a{
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  gap:10px !important;
+  width:100% !important;
+  text-decoration:none !important;
+  background: linear-gradient(135deg, var(--accent), var(--accent2)) !important;
+  color:#fff !important;
+  border-radius:14px !important;
+  padding: 1.05rem 1.05rem !important;
+  border: none !important;
+  font-size: 1.05rem !important;
+  font-weight: 1000 !important;
+  box-shadow: 0 14px 35px rgba(255,75,75,0.22) !important;
+  transition: 0.16s !important;
+}
+
+pre, code{
+  background: rgba(255,255,255,0.06) !important;
+  color: #EEE !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  border-radius: 14px !important;
+  font-size: 0.98rem !important;
+}
+
+.gold-gradient{
+  background: linear-gradient(90deg, #FFF2B8 0%, #FFD700 35%, #FFB84D 70%, #FFE9A6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent !important;
+  text-shadow: 0 10px 28px rgba(255, 215, 0, 0.16);
+}
+
+.card-badge{
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: clamp(22px, 0.9vw + 14px, 32px) !important;
+  height: auto;
+  opacity: 0.98;
+  filter: drop-shadow(0 10px 22px rgba(255,215,0,0.18));
+  pointer-events: none;
+  z-index: 9999 !important;
+}
+
+div[data-baseweb="popover"]{ z-index: 99999 !important; }
+div[data-baseweb="popover"] [role="listbox"],
+div[data-baseweb="popover"] ul{
+  background-color: var(--form-bg-2) !important;
+  border: 1px solid rgba(255,255,255,0.14) !important;
+  border-radius: 14px !important;
+  overflow: hidden !important;
+}
+div[data-baseweb="popover"] [role="option"],
+div[data-baseweb="popover"] li{ color: #fff !important; background: transparent !important; }
+
+/* LINE CTA buttons */
+.line-cta-wrap{ margin: 10px 0 6px 0; }
+.line-cta-btn{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  width:100%;
+  text-decoration:none !important;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color:#fff !important;
+  border-radius: 14px;
+  padding: 1.05rem 1.05rem;
+  border: none;
+  box-shadow: 0 14px 35px rgba(255,75,75,0.22);
+  font-size: 1.05rem !important;
+  font-weight: 1000 !important;
+  cursor:pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(0,0,0,0);
+}
+.line-cta-btn.secondary{
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.18);
+  box-shadow: 0 14px 35px rgba(0,0,0,0.20);
+  color:#fff !important;
+}
+.line-cta-hint{
+  color: rgba(255,255,255,0.72);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  margin-top: 6px;
+}
+"""
+
+st.markdown("<style>/* CSS_VERSION:" + CSS_VERSION + " */\n" + CSS + "\n</style>", unsafe_allow_html=True)
+
+
+# =========================
+# 4) Session State
 # =========================
 if "page" not in st.session_state:
     st.session_state.page = "intro"  # intro / quiz / result
@@ -375,13 +406,10 @@ if "u_domain" not in st.session_state:
     st.session_state.u_domain = ""
 if "answers_map" not in st.session_state:
     st.session_state.answers_map = {}
-
-# 分成兩段：做完問卷（先寫/先推）＋選興趣（再寫/再推）
-if "notified_quiz" not in st.session_state:
-    st.session_state.notified_quiz = False
-if "notified_interest" not in st.session_state:
-    st.session_state.notified_interest = False
-
+if "notified_quiz_done" not in st.session_state:
+    st.session_state.notified_quiz_done = False
+if "notified_interest_done" not in st.session_state:
+    st.session_state.notified_interest_done = False
 if "u_interest" not in st.session_state:
     st.session_state.u_interest = ""
 if "u_interest_other" not in st.session_state:
@@ -389,17 +417,16 @@ if "u_interest_other" not in st.session_state:
 
 
 # =========================
-# 4) Spreadsheet URL
+# 5) Spreadsheet URL
 # =========================
 DEFAULT_SHEET_URL = "https://docs.google.com/spreadsheets/d/1GxpOmk108RM8wd9lvrQSpngTm5_KWpKkF31bbXjZKv8/edit"
 SPREADSHEET_URL = (
-    sget(st.secrets, "connections", "gsheets", "spreadsheet", default=DEFAULT_SHEET_URL)
-    or DEFAULT_SHEET_URL
+    sget(st.secrets, "connections", "gsheets", "spreadsheet", default=DEFAULT_SHEET_URL) or DEFAULT_SHEET_URL
 )
 
 
 # =========================
-# 5) GSheets 讀寫相容封裝 + Retry
+# 6) GSheets 讀寫相容封裝 + Retry
 # =========================
 def get_conn():
     return st.connection("gsheets", type=GSheetsConnection)
@@ -426,7 +453,7 @@ def gs_update(conn, worksheet: str, data):
 
 
 # =========================
-# 6) Google Drive 圖片連結：thumbnail（最穩）
+# 7) Google Drive 圖片連結：thumbnail 直連（最穩）
 # =========================
 _DRIVE_ID_PATTERNS = [
     r"/file/d/([^/]+)",
@@ -450,10 +477,6 @@ def extract_drive_file_id(url: str) -> str:
 
 
 def drive_img(url: str, width: int = 1200) -> str:
-    """
-    把 Drive 分享連結轉成可直接顯示的圖片直連（thumbnail）
-    - Drive 常擋 HEAD，所以不要用 HEAD 去 gate
-    """
     if not url or pd.isna(url):
         return ""
     s = str(url).strip()
@@ -464,7 +487,7 @@ def drive_img(url: str, width: int = 1200) -> str:
 
 
 # =========================
-# GSheets 自檢（debug=1）
+# 8) GSheets 自檢（debug=1）
 # =========================
 def gsheets_self_check():
     st.sidebar.write("---")
@@ -502,21 +525,14 @@ if DEBUG:
 
 
 # =========================
-# 7) partners（多人友善：cache_data 共用 300 秒）
+# 9) partners（多人友善：cache_data 共用 300 秒）
 # =========================
-REQUIRED_PARTNER_COLS = {
-    "ref", "name", "title", "img_url", "line_id", "line_search_id", "line_token", "password"
-}
-OPTIONAL_PARTNER_COLS = {"leader_ref", "leader_name", "partner_role", "line_add_url"}
+REQUIRED_PARTNER_COLS = {"ref", "name", "title", "img_url", "line_id", "line_search_id", "line_token", "password"}
+OPTIONAL_PARTNER_COLS = {"line_add_url", "leader_ref", "leader_name", "partner_role"}
 
 
 @st.cache_data(ttl=300, show_spinner=False)
 def load_all_partners_cached(spreadsheet_url: str, debug_flag: bool):
-    """
-    多人友善重點：
-    - 用 st.cache_data 讓同一台 Streamlit worker 在 300 秒內只讀一次 partners 表
-    - 讀取本身仍帶 retry，避免 Google API 偶發斷線
-    """
     conn = get_conn()
     df_m = gs_read(conn, "partners_master", ttl=0)
     df_t = gs_read(conn, "partners_team", ttl=0)
@@ -525,21 +541,18 @@ def load_all_partners_cached(spreadsheet_url: str, debug_flag: bool):
     df_t.columns = df_t.columns.str.strip().str.lower()
 
     df_all = pd.concat([df_m, df_t], ignore_index=True)
+    df_all.columns = df_all.columns.str.strip().str.lower()
 
     missing = REQUIRED_PARTNER_COLS - set(df_all.columns)
     if missing:
         raise RuntimeError(f"partners 表缺少必要欄位：{', '.join(sorted(missing))}")
 
-    # 可選欄位補空
     for c in OPTIONAL_PARTNER_COLS:
         if c not in df_all.columns:
             df_all[c] = ""
 
     df_all["ref"] = df_all["ref"].astype(str).map(norm_ref)
-    for col in ["line_search_id", "line_id", "line_token"]:
-        df_all[col] = df_all[col].astype(str).str.strip()
-
-    for col in ["leader_ref", "leader_name", "partner_role"]:
+    for col in ["line_search_id", "line_id", "line_token", "line_add_url"]:
         df_all[col] = df_all[col].astype(str).str.strip()
 
     return df_all
@@ -567,10 +580,8 @@ except Exception as e:
 ref = norm_ref(get_qp("ref", "master"))
 partner = pick_partner(df_all, ref)
 
-# ✅ 直接用 thumbnail 直連（不做 HEAD gate）
 p_img = drive_img(partner.get("img_url", ""), width=800)
 
-# ✅ badge 也用 thumbnail（更穩）
 BADGE_FILE_ID = "1Dz9q_hoxG4BN9YOHymw7JjqJaq5kEFGf"
 BADGE_URL = drive_img(BADGE_FILE_ID, width=200)
 
@@ -581,9 +592,18 @@ if DEBUG:
     st.sidebar.write("img_url(final):", p_img)
     st.sidebar.write("badge(final):", BADGE_URL)
 
+    st.sidebar.write("---")
+    st.sidebar.subheader("🧷 LINE Link Debug")
+    st.sidebar.write("UA:", UA)
+    st.sidebar.write("IS_LINE_INAPP:", IS_LINE_INAPP)
+    st.sidebar.write("IS_ANDROID:", IS_ANDROID)
+    st.sidebar.write("IS_IOS:", IS_IOS)
+    st.sidebar.write("line_search_id:", str(partner.get("line_search_id", "")))
+    st.sidebar.write("line_add_url:", str(partner.get("line_add_url", "")))
+
 
 # =========================
-# 8) Sidebar（海報式顧問卡 + 徽章）
+# 10) Sidebar（海報式顧問卡 + 徽章）
 # =========================
 st.sidebar.write("---")
 
@@ -592,9 +612,9 @@ sb_title = str(partner.get("title", "")).strip()
 sb_ref = str(partner.get("ref", "")).strip()
 
 img_html = (
-    f'<img class="sb-img" src="{p_img}" alt="partner" loading="lazy" '
-    f'onerror="this.style.display=\'none\';" />'
-    if p_img else ""
+    f'<img class="sb-img" src="{p_img}" alt="partner" loading="lazy" onerror="this.style.display=\'none\';" />'
+    if p_img
+    else ""
 )
 ref_html = f'<div class="sb-ref">ref：{sb_ref}</div>' if DEBUG and sb_ref else ""
 
@@ -609,35 +629,33 @@ st.sidebar.markdown(
       {ref_html}
     </div>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 
 # =========================
-# 9) 主要頁面顧問卡（安全版）＋徽章
+# 11) 主要頁面顧問卡（安全版）＋徽章
 # =========================
 def show_partner_card():
     name = str(partner.get("name", "")).strip()
     title = str(partner.get("title", "")).strip()
-
     img = str(p_img or "").strip()
-    has_img = bool(img)
 
     ref_text = str(partner.get("ref", "")).strip()
     ref_html2 = f'<div class="partner-ref">ref：{ref_text}</div>' if DEBUG and ref_text else ""
 
     badge_html = (
         f'<img class="card-badge" src="{BADGE_URL}" alt="badge" onerror="this.style.display=\'none\';" />'
-        if BADGE_URL else ""
+        if BADGE_URL
+        else ""
     )
 
-    if has_img:
+    if img:
         html = f"""
         <div class="partner-card">
           {badge_html}
           <img class="partner-img" src="{img}" alt="partner" loading="lazy"
-               onerror="this.style.display='none';"
-               style="width:56px;height:56px;max-width:56px;max-height:56px;object-fit:cover;border-radius:16px;" />
+               onerror="this.style.display='none';" />
           <div class="partner-meta">
             <div class="partner-kicker">你的專屬顧問</div>
             <div class="partner-name gold-gradient">{name}</div>
@@ -662,7 +680,7 @@ def show_partner_card():
 
 
 # =========================
-# 10) 題庫 / 文案
+# 12) 題庫 / 文案
 # =========================
 questions = [
     ("① AI 起風了，你會？", [("🚀 先衝先卡位", "A"), ("🧠 先做一套方法", "B"), ("🤝 先找對的人一起", "C"), ("🛡️ 先確認不會翻車", "D")]),
@@ -703,7 +721,7 @@ INTEREST_PLACEHOLDER = "請選擇（必填）"
 
 
 # =========================
-# 11) Header / Progress
+# 13) Header / Progress
 # =========================
 def progress_value():
     if st.session_state.page == "intro":
@@ -717,29 +735,99 @@ def render_header():
     st.markdown('<div class="hero-title">© 2026 AI 財富診斷</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="hero-subtitle">10 題快速測出你的風格，價值1200元 限時免費！給你「1頁專屬解析」與下一步建議</div>',
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
     st.progress(progress_value())
 
 
 # =========================
-# 12) leads + LINE 推播（雙寫入 / 雙推播）
+# 14) LINE CTA：主用 line_search_id，備援 line_add_url（Android/LINE 內建瀏覽器更穩）
+# =========================
+def build_line_main_url(line_search_id: str) -> str:
+    s = str(line_search_id or "").strip()
+    if not s:
+        return ""
+
+    if s.startswith("http://") or s.startswith("https://") or s.startswith("line://"):
+        return s
+
+    if s.startswith("@"):
+        oa = s[1:]
+        return f"https://line.me/R/oaMessage/%40{oa}/?hi"
+
+    return f"https://line.me/ti/p/~{s}"
+
+
+def add_open_external(url: str) -> str:
+    return add_query(url, openExternalBrowser="1")
+
+
+def render_line_cta():
+    line_search_id = str(partner.get("line_search_id", "")).strip()
+    line_add_url = str(partner.get("line_add_url", "")).strip()
+
+    if not line_search_id:
+        line_search_id = str(st.secrets.get("MASTER_LINE_SEARCH_ID", "")).strip()
+    if not line_add_url:
+        line_add_url = str(st.secrets.get("MASTER_LINE_ADD_URL", "")).strip()
+
+    main_url = build_line_main_url(line_search_id) if line_search_id else ""
+    backup_url = line_add_url if line_add_url else ""
+
+    backup_url_ext = add_open_external(backup_url) if backup_url else ""
+    main_url_ext = add_open_external(main_url) if main_url else ""
+
+    primary_url = main_url
+    if IS_LINE_INAPP and IS_ANDROID:
+        if backup_url_ext:
+            primary_url = backup_url_ext
+        elif main_url_ext:
+            primary_url = main_url_ext
+
+    if not primary_url and not backup_url:
+        st.info("（尚未設定 line_search_id / line_add_url）")
+        return
+
+    btns = []
+    if primary_url:
+        btns.append(
+            f'<a class="line-cta-btn" href="{primary_url}" target="_blank" rel="noopener noreferrer">💬 立即加 LINE</a>'
+        )
+    if backup_url_ext and backup_url_ext != primary_url:
+        btns.append(
+            f'<a class="line-cta-btn secondary" href="{backup_url_ext}" target="_blank" rel="noopener noreferrer">🧭 無法開啟？點這裡（備援）</a>'
+        )
+    elif main_url_ext and main_url_ext != primary_url:
+        btns.append(
+            f'<a class="line-cta-btn secondary" href="{main_url_ext}" target="_blank" rel="noopener noreferrer">🧭 無法開啟？點這裡（備援）</a>'
+        )
+
+    st.markdown('<div class="line-cta-wrap">' + "".join(btns) + "</div>", unsafe_allow_html=True)
+    st.markdown('<div class="line-cta-hint">（加 LINE 後可領取專屬解析與活動資訊）</div>', unsafe_allow_html=True)
+
+    if DEBUG:
+        st.sidebar.write("---")
+        st.sidebar.write("primary_url:", primary_url)
+        st.sidebar.write("main_url:", main_url)
+        st.sidebar.write("backup_url:", backup_url)
+        st.sidebar.write("backup_url_ext:", backup_url_ext)
+        st.sidebar.write("main_url_ext:", main_url_ext)
+
+
+# =========================
+# 15) leads + LINE 推播（雙寫入）
 # =========================
 def push_line(token: str, to_id: str, text: str, tag: str = "") -> bool:
-    """
-    回傳 True/False，debug=1 時會把 status code 打在 sidebar
-    """
     if not token or not to_id:
         if DEBUG:
             st.sidebar.write(f"LINE push({tag}) skipped: missing token/to_id")
         return False
-
     try:
         resp = requests.post(
             "https://api.line.me/v2/bot/message/push",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
             json={"to": to_id, "messages": [{"type": "text", "text": text}]},
-            timeout=10
+            timeout=10,
         )
         ok = 200 <= resp.status_code < 300
         if DEBUG:
@@ -757,9 +845,6 @@ LEADS_COLS = [
     "time",
     "ref",
     "partner_name",
-    "leader_ref",
-    "leader_name",
-    "partner_role",
     "client_name",
     "client_job",
     "interest",
@@ -770,14 +855,39 @@ LEADS_COLS = [
     "keyword",
     "mode",
     "funnel",
-    "stage",  # quiz_done / interest_selected
+    "event",
 ]
 
 
+def _sheet_id_from_url(url: str) -> str:
+    m = re.search(r"/spreadsheets/d/([^/]+)", str(url))
+    return m.group(1) if m else ""
+
+
 def gs_append_row_best_effort(conn, worksheet: str, row_dict: dict, cols: list[str]) -> bool:
-    """
-    兼容版：以 read->concat->update 寫入（穩定、相容 streamlit_gsheets）
-    """
+    values = [row_dict.get(c, "") for c in cols]
+    try:
+        client = getattr(conn, "client", None) or getattr(conn, "_client", None)
+        if client is None:
+            raise AttributeError("no gspread client on connection")
+        try:
+            ss = client.open_by_url(SPREADSHEET_URL)
+        except Exception:
+            sid = _sheet_id_from_url(SPREADSHEET_URL)
+            if not sid:
+                raise
+            ss = client.open_by_key(sid)
+        ws = ss.worksheet(worksheet)
+
+        def _do_append():
+            return ws.append_row(values, value_input_option="USER_ENTERED")
+
+        _retry(_do_append, name=f"append_row:{worksheet}")
+        return True
+    except Exception as e:
+        if DEBUG:
+            st.sidebar.write(f"append_row fallback -> {type(e).__name__}: {e}")
+
     try:
         df_leads = gs_read(conn, worksheet, ttl=0 if DEBUG else 30)
         df_leads.columns = df_leads.columns.str.strip().str.lower()
@@ -794,61 +904,30 @@ def gs_append_row_best_effort(conn, worksheet: str, row_dict: dict, cols: list[s
     return True
 
 
-def _build_line_msg(stage: str, primary: str, secondary: str, persona_name: str, keyword: str, interest: str) -> str:
-    p_ref = str(partner.get("ref", "")).strip()
-    p_name = str(partner.get("name", "")).strip()
-    leader_ref = str(partner.get("leader_ref", "")).strip()
-    leader_name = str(partner.get("leader_name", "")).strip()
-    role = str(partner.get("partner_role", "")).strip()
-
-    stage_label = "①問卷完成" if stage == "quiz_done" else "②已選興趣"
-    interest_show = interest if interest else "（未填）"
-
-    who_line = f"👤 {st.session_state.u_name}\n💼 狀態：{st.session_state.u_domain}"
-    org_line = f"🔗 ref：{p_ref}｜顧問：{p_name}"
-    if leader_ref or leader_name or role:
-        org_line += f"\n🏷️ 身份：{role or '-'}｜領袖：{leader_name or '-'}({leader_ref or '-'})"
-
-    return (
-        f"🚀 新名單通知 - {stage_label}（{FUNNEL_TAG}/{MODE}）\n"
-        f"{who_line}\n"
-        f"🧩 類型：{primary}{('/'+secondary) if secondary else ''}  {persona_name}\n"
-        f"🎯 興趣：{interest_show}\n"
-        f"🧷 關鍵字：{keyword}\n"
-        f"{org_line}"
-    )
-
-
-def write_lead_and_notify(stage: str, primary: str, secondary: str, persona_name: str, counts: Counter, keyword: str, interest: str):
+def write_lead_and_notify(primary: str, secondary: str, persona_name: str, counts: Counter, keyword: str, interest: str, event: str):
     tz = timezone(timedelta(hours=8))
     now_tw = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
-
     conn = get_conn()
 
     row = {
         "time": now_tw,
         "ref": str(partner.get("ref", "")).strip(),
         "partner_name": partner.get("name", ""),
-        "leader_ref": str(partner.get("leader_ref", "")).strip(),
-        "leader_name": str(partner.get("leader_name", "")).strip(),
-        "partner_role": str(partner.get("partner_role", "")).strip(),
         "client_name": st.session_state.u_name,
         "client_job": st.session_state.u_domain,
-        "interest": interest,
+        "interest": interest or "",
         "result": persona_name,
         "result_primary": primary,
         "result_secondary": secondary,
         "scores": json.dumps(dict(counts), ensure_ascii=False),
-        "keyword": keyword,
+        "keyword": keyword or "",
         "mode": MODE,
         "funnel": FUNNEL_TAG,
-        "stage": stage,
+        "event": event,
     }
 
-    # 寫入 leads（兩次）
     gs_append_row_best_effort(conn, "leads", row, LEADS_COLS)
 
-    # LINE 推播（主控 + 夥伴）
     line_cfg = sget(st.secrets, "line", default={}) or {}
     master_token = str(line_cfg.get("channel_access_token") or st.secrets.get("LINE_CHANNEL_ACCESS_TOKEN", "")).strip()
     master_to_id = str(line_cfg.get("user_id") or st.secrets.get("LINE_USER_ID", "")).strip()
@@ -856,7 +935,24 @@ def write_lead_and_notify(stage: str, primary: str, secondary: str, persona_name
     partner_token = str(partner.get("line_token") or "").strip()
     partner_to_id = str(partner.get("line_id") or "").strip()
 
-    msg = _build_line_msg(stage, primary, secondary, persona_name, keyword, interest)
+    if event == "quiz_done":
+        msg = (
+            f"✅ 完成問卷（{FUNNEL_TAG}/{MODE}）\n"
+            f"👤 {st.session_state.u_name}\n"
+            f"🧩 類型：{primary}{('/'+secondary) if secondary else ''}  {persona_name}\n"
+            f"💼 狀態：{st.session_state.u_domain}\n"
+            f"🔗 ref：{partner.get('ref', '')}"
+        )
+    else:
+        msg = (
+            f"🚀 已選興趣（{FUNNEL_TAG}/{MODE}）\n"
+            f"👤 {st.session_state.u_name}\n"
+            f"🎯 興趣：{interest}\n"
+            f"🧩 類型：{primary}{('/'+secondary) if secondary else ''}  {persona_name}\n"
+            f"🧷 關鍵字：{keyword}\n"
+            f"💼 狀態：{st.session_state.u_domain}\n"
+            f"🔗 ref：{partner.get('ref', '')}"
+        )
 
     push_line(master_token, master_to_id, msg, tag="master")
     push_line(partner_token, partner_to_id, msg, tag="partner")
@@ -865,101 +961,10 @@ def write_lead_and_notify(stage: str, primary: str, secondary: str, persona_name
 # =========================
 # Pages
 # =========================
-
-def _render_line_buttons():
-    """主連結用 line_search_id；備援連結用 line_add_url（可解 LINE 內掃碼打不開）。"""
-    # 1) 取資料：夥伴表優先，沒有就用 secrets 做全域預設
-    line_sid = str(partner.get("line_search_id", "") or "").strip()
-    line_add_url = str(partner.get("line_add_url", "") or "").strip()
-
-    if not line_sid:
-        line_sid = str(st.secrets.get("MASTER_LINE_ADD", "") or "").strip()
-    if not line_add_url:
-        line_add_url = str(st.secrets.get("MASTER_LINE_ADD_URL", "") or "").strip()
-
-    # 2) UA / in-app 偵測：Streamlit 伺服端拿不到 header，所以用前端 JS 寫回 query params
-    ua = str(get_qp("ua", "") or "").strip()
-    inapp_flag = str(get_qp("inapp", "") or "").strip()
-
-    if not ua:
-        components.html(
-            """
-            <script>
-            try {
-              const ua = navigator.userAgent || "";
-              const params = new URLSearchParams(window.location.search);
-              if (!params.get("ua")) {
-                params.set("ua", ua);
-                params.set("inapp", (/Line|LIFF/i.test(ua) ? "1" : "0"));
-                const newUrl = window.location.pathname + "?" + params.toString() + window.location.hash;
-                window.location.replace(newUrl);
-              }
-            } catch (e) {}
-            </script>
-            """,
-            height=0,
-        )
-
-    # 這一輪 render 可能還拿不到（要等頁面 replace 完），所以用 fallback 推估
-    if not inapp_flag:
-        inapp_flag = "1" if re.search(r"(Line|LIFF)", ua, re.I) else "0"
-
-    is_line_inapp = str(inapp_flag).lower() in ("1", "true", "yes", "y")
-
-    # 3) 產生連結
-    links_main = build_line_links(line_sid) if line_sid else {}
-    links_backup = build_line_links(line_add_url) if line_add_url else {}
-
-    def choose_main(links: dict) -> str:
-        if not links:
-            return ""
-        # 主：line_search_id（可依 UA 在 LINE 內加上 external 版本提高成功率）
-        if is_line_inapp:
-            return links.get("add_url_external") or links.get("add_url") or links.get("chat_url") or links.get("fallback_url")
-        return links.get("add_url") or links.get("chat_url") or links.get("fallback_url") or links.get("add_url_external")
-
-    def choose_backup(links: dict) -> str:
-        if not links:
-            return ""
-        # 備援：line_add_url（通常是 lin.ee / 邀請碼連結）
-        if is_line_inapp:
-            return links.get("add_url_external") or links.get("fallback_url") or links.get("add_url") or links.get("chat_url")
-        return links.get("fallback_url") or links.get("add_url") or links.get("add_url_external") or links.get("chat_url")
-
-    main_url = choose_main(links_main)
-    backup_url = choose_backup(links_backup)
-
-    # 4) 顯示按鈕（主＋備援）
-    if main_url:
-        st.link_button("💬 立即加 LINE", main_url)
-
-        if backup_url and backup_url != main_url:
-            st.link_button("🛟 如果打不開，點我備援", backup_url)
-
-        st.caption("（有些手機在 LINE 內掃碼/內建瀏覽器會打不開，請改按「備援」）")
-    elif backup_url:
-        st.link_button("💬 立即加 LINE", backup_url)
-        st.caption("（已使用備援連結）")
-    else:
-        st.info("（尚未設定 line_search_id / line_add_url / MASTER_LINE_ADD）")
-
-    # 5) Debug
-    if DEBUG:
-        st.sidebar.write("---")
-        st.sidebar.subheader("🧷 LINE Link Debug")
-        st.sidebar.write("UA:", ua)
-        st.sidebar.write("IS_LINE_INAPP:", is_line_inapp)
-        st.sidebar.write("line_search_id:", line_sid)
-        st.sidebar.write("line_add_url:", line_add_url)
-        st.sidebar.write("main_url:", main_url)
-        st.sidebar.write("backup_url:", backup_url)
-
-
 def page_intro():
     show_partner_card()
     render_header()
-
-    _render_line_buttons()
+    render_line_cta()
 
     st.markdown("---")
     st.markdown('<div class="hero-title">價值1200元，限時免費！想領取專屬解析？做 10 題</div>', unsafe_allow_html=True)
@@ -977,8 +982,8 @@ def page_intro():
             st.session_state.page = "quiz"
             st.session_state.step = 1
             st.session_state.answers_map = {}
-            st.session_state.notified_quiz = False
-            st.session_state.notified_interest = False
+            st.session_state.notified_quiz_done = False
+            st.session_state.notified_interest_done = False
             st.session_state.u_interest = ""
             st.session_state.u_interest_other = ""
             st.rerun()
@@ -1032,7 +1037,7 @@ def _interest_default_index():
     cur = str(st.session_state.u_interest or "").strip()
     if not cur:
         return 0
-    if cur.startswith("其他"):
+    if cur.startswith("其他："):
         return 1 + INTEREST_OPTIONS.index("其他（可填）")
     if cur in INTEREST_OPTIONS:
         return 1 + INTEREST_OPTIONS.index(cur)
@@ -1072,21 +1077,12 @@ def page_result():
     copy = COPY.get(primary, COPY["A"])
     CTA_KEYWORD = copy.get("cta", "R1")
 
-    # ✅ ① 做完問卷：先寫一次＋先推一次（不含興趣）
-    if not st.session_state.notified_quiz:
+    if not st.session_state.notified_quiz_done:
         try:
-            write_lead_and_notify(
-                stage="quiz_done",
-                primary=primary,
-                secondary=secondary,
-                persona_name=persona_name,
-                counts=counts,
-                keyword=CTA_KEYWORD,
-                interest=""  # 尚未選
-            )
-            st.session_state.notified_quiz = True
+            write_lead_and_notify(primary, secondary, persona_name, counts, CTA_KEYWORD, "", event="quiz_done")
+            st.session_state.notified_quiz_done = True
         except Exception as e:
-            st.warning("已完成問卷，但（第一次）寫入 leads 或推播失敗。")
+            st.warning("已完成問卷，但（寫入 leads / 推播）失敗。")
             if DEBUG:
                 st.exception(e)
 
@@ -1113,7 +1109,7 @@ def page_result():
         [INTEREST_PLACEHOLDER] + INTEREST_OPTIONS,
         index=_interest_default_index(),
         key="interest_select",
-        disabled=bool(st.session_state.notified_interest),
+        disabled=bool(st.session_state.notified_interest_done),
     )
 
     other_text = ""
@@ -1122,7 +1118,7 @@ def page_result():
             "其他（請填寫）",
             value=st.session_state.u_interest_other,
             key="interest_other",
-            disabled=bool(st.session_state.notified_interest),
+            disabled=bool(st.session_state.notified_interest_done),
         )
 
     interest_final = _normalize_interest(interest_selection, other_text)
@@ -1134,15 +1130,14 @@ def page_result():
 
     ready = bool(st.session_state.u_interest)
 
-    if not ready and not st.session_state.notified_interest:
-        st.info("請先完成「興趣（必填）」選擇，系統才會進行第二次寫入與推播。")
+    if not ready and not st.session_state.notified_interest_done:
+        st.info("請先完成「興趣（必填）」選擇，系統才會再寫入一筆名單並推播通知。")
 
     if ready:
         st.markdown("---")
         st.markdown("### ✅ 想領取「1頁專屬解析＋你適合的引流方式」")
         st.write("加 LINE 後回覆關鍵字：")
         st.code(CTA_KEYWORD, language=None)
-        st.caption("（下方可一鍵複製到剪貼簿）")
 
         kw_js = json.dumps(CTA_KEYWORD, ensure_ascii=False)
         components.html(
@@ -1177,25 +1172,18 @@ def page_result():
             height=90,
         )
 
-        # ✅ ② 選完興趣：再寫一次＋再推一次（含興趣）
-        if not st.session_state.notified_interest:
+        if not st.session_state.notified_interest_done:
             try:
                 write_lead_and_notify(
-                    stage="interest_selected",
-                    primary=primary,
-                    secondary=secondary,
-                    persona_name=persona_name,
-                    counts=counts,
-                    keyword=CTA_KEYWORD,
-                    interest=st.session_state.u_interest
+                    primary, secondary, persona_name, counts, CTA_KEYWORD, st.session_state.u_interest, event="interest_done"
                 )
-                st.session_state.notified_interest = True
+                st.session_state.notified_interest_done = True
             except Exception as e:
-                st.warning("名單已產生，但（第二次）寫入 leads 或推播失敗。")
+                st.warning("已選興趣，但（寫入 leads / 推播）失敗。")
                 if DEBUG:
                     st.exception(e)
 
-        _render_line_buttons()
+        render_line_cta()
 
     if st.button("重新測驗", key="reset_btn"):
         st.session_state.page = "intro"
@@ -1203,20 +1191,16 @@ def page_result():
         st.session_state.u_name = ""
         st.session_state.u_domain = ""
         st.session_state.answers_map = {}
-        st.session_state.notified_quiz = False
-        st.session_state.notified_interest = False
+        st.session_state.notified_quiz_done = False
+        st.session_state.notified_interest_done = False
         st.session_state.u_interest = ""
         st.session_state.u_interest_other = ""
         st.rerun()
 
 
-# =========================
-# 後台（側邊欄）
-# =========================
 def sidebar_admin_panel():
     st.sidebar.write("---")
     pwd = st.sidebar.text_input("🔐 管理授權碼", type="password")
-
     if not pwd:
         return
 
@@ -1230,13 +1214,13 @@ def sidebar_admin_panel():
         partner_ref = str(partner.get("ref", "")).strip()
 
         if admin_pwd and str(pwd) == admin_pwd:
-            st.subheader("📊 團隊全名單（主控）")
-            st.dataframe(all_leads, use_container_width=True)
+            st.sidebar.subheader("📊 團隊全名單（主控）")
+            st.sidebar.dataframe(all_leads, use_container_width=True)
 
         elif partner_pwd and str(pwd) == partner_pwd:
-            st.subheader(f"📈 {partner.get('name', '')} 的個人名單")
+            st.sidebar.subheader("📈 你的名單")
             mask = all_leads["ref"].astype(str).map(norm_ref) == norm_ref(partner_ref)
-            st.dataframe(all_leads[mask], use_container_width=True)
+            st.sidebar.dataframe(all_leads[mask], use_container_width=True)
 
         else:
             st.sidebar.error("密碼錯誤")
@@ -1244,12 +1228,10 @@ def sidebar_admin_panel():
     except Exception as e:
         st.sidebar.error("後台讀取失敗（加上 ?debug=1 看原始錯誤）")
         if DEBUG:
-            st.exception(e)
+            st.sidebar.exception(e)
 
 
-# =========================
 # Router
-# =========================
 if st.session_state.page == "intro":
     page_intro()
 elif st.session_state.page == "quiz":
