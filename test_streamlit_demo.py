@@ -53,6 +53,9 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertEqual(len(app.exception), 0)
         self.assertEqual(app.session_state["quiz_id"], "birthday")
         markdown = "\n".join(element.value for element in app.markdown)
+        self.assertIn("DIGITAL BUSINESS CARD", markdown)
+        self.assertIn("＋ 加入 侯閔議 的 LINE", markdown)
+        self.assertIn("一張名片，兩種認識方式", markdown)
         self.assertIn("10 秒看見你的生命靈數", markdown)
         self.assertEqual(
             app.button(key="start_btn_mobile").label,
@@ -92,7 +95,7 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
 
     def test_three_entry_messages_render(self) -> None:
         expectations = {
-            "friend": "先了解自己，再決定下一步怎麼走",
+            "friend": "先保存聯絡方式，再用 10 秒認識自己",
             "cold": "你不是不努力，可能只是還沒找到適合自己的行動方式",
             "social": "快速看見你現在最值得優先調整的一步",
         }

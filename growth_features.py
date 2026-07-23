@@ -66,11 +66,11 @@ def entry_copy(context: AcquisitionContext, partner_name: str) -> Dict[str, str]
             "start_label": "立即看我的結果",
         }
     return {
-        "eyebrow": f"{partner} 特別分享給你",
-        "title": "先了解自己，再決定下一步怎麼走",
-        "subtitle": "這不是推銷表單。完成後會直接看到完整解析，再由你決定是否聯絡分享人。",
-        "partner_kicker": "分享這份測驗給你的人",
-            "start_label": "開始 2 分鐘探索",
+        "eyebrow": f"{partner} 的數位名片",
+        "title": "先保存聯絡方式，再用 10 秒認識自己",
+        "subtitle": "可以直接加入 LINE，也可以先看完整生命靈數；兩個入口都由你決定。",
+        "partner_kicker": "這張數位名片的主人",
+        "start_label": "開始 2 分鐘探索",
     }
 
 
@@ -89,6 +89,18 @@ def build_share_url(base_url: str, context: AcquisitionContext, quiz_id: str) ->
         }
     )
     return urlunsplit((parts.scheme, parts.netloc, parts.path or "/", query, ""))
+
+
+def build_digital_card_url(base_url: str, partner_ref: str) -> str:
+    """Build the stable, trackable QR destination for a partner's digital card."""
+    context = AcquisitionContext.from_values(
+        ref_input=partner_ref,
+        source="qr",
+        campaign="digital_card",
+        entry="friend",
+        forced_quiz="birthday",
+    )
+    return build_share_url(base_url, context, "birthday")
 
 
 def build_partner_share_pack(

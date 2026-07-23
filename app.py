@@ -11,6 +11,7 @@
 4) 夥伴分享包：LINE / Instagram / Facebook / 跟進文字
 """
 
+import io
 import json
 import os
 import re
@@ -24,6 +25,7 @@ from collections import Counter
 from datetime import datetime, timezone, timedelta
 from html import escape as html_escape
 from typing import Optional, Tuple, Dict, Any, List
+from urllib.parse import quote
 
 import requests
 import pandas as pd
@@ -34,6 +36,7 @@ from growth_features import (
     AcquisitionContext,
     EVENT_COLUMNS,
     build_campaign_share_pack,
+    build_digital_card_url,
     build_event_row,
     build_partner_share_pack,
     build_share_url,
@@ -55,6 +58,15 @@ try:
 except Exception:
     HAS_PLOTLY = False
 
+# QR code generation is optional at runtime; the digital-card page still works
+# if a cached environment has not installed the new dependency yet.
+try:
+    import qrcode
+    HAS_QRCODE = True
+except Exception:
+    qrcode = None
+    HAS_QRCODE = False
+
 # importlib.metadata（環境偵測）
 try:
     from importlib import metadata as importlib_metadata
@@ -67,7 +79,7 @@ except Exception:
 # =========================
 st.set_page_config(page_title="2026 AI 風格診斷", page_icon="🤖", layout="centered")
 
-APP_VERSION = "growth-funnel-v3.1.0"
+APP_VERSION = "growth-funnel-v3.2.0"
 BIRTHDAY_QUIZ_VERSION = "2026LIFE2-HUM20-v1.0"
 WEALTH_QUIZ_VERSION = "2026Q1-10Q-v1.2"
 HEALTH_QUIZ_VERSION = "2026H1-10Q-v1.1"
@@ -412,7 +424,7 @@ BADGE_URL = "" if DEMO_MODE else drive_img(BADGE_FILE_ID, width=200)
 # =========================
 # 5) CSS（玻璃卡 + 多巴胺卡 + 黏著 CTA）
 # =========================
-CSS_VERSION = "2026-07-23-growth-v2.1.0"
+CSS_VERSION = "2026-07-23-growth-v2.2.0"
 
 st.markdown(
     f"""
@@ -555,6 +567,75 @@ pre, code{{
 .partner-name{{ font-size:1.25rem; font-weight:1000; margin-top:2px; }}
 .partner-title{{ font-size:0.98rem; color:rgba(255,255,255,0.78) !important; margin-top:2px; }}
 .partner-ref{{ margin-top:4px; font-size:0.82rem; color:rgba(255,255,255,0.65) !important; }}
+
+/* Digital business card actions */
+.digital-card-entry{{
+  border-radius:22px;
+  border:1px solid rgba(6,199,85,0.34);
+  background:linear-gradient(145deg, rgba(6,199,85,0.13), rgba(255,255,255,0.04));
+  box-shadow:0 18px 45px rgba(0,0,0,0.26);
+  padding:16px;
+  margin:8px 0 14px;
+}}
+.digital-card-kicker{{
+  color:#78E7A5 !important;
+  font-size:0.82rem;
+  font-weight:1000;
+  letter-spacing:0.08em;
+}}
+.digital-card-title{{
+  font-size:1.2rem;
+  font-weight:1000;
+  margin-top:4px;
+}}
+.digital-card-copy{{
+  color:rgba(255,255,255,0.72) !important;
+  font-size:0.92rem;
+  line-height:1.5;
+  margin:5px 0 12px;
+}}
+.digital-card-actions{{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:10px;
+}}
+.digital-card-btn{{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height:52px;
+  padding:10px 12px;
+  border-radius:15px;
+  font-weight:1000;
+  line-height:1.25;
+  text-align:center;
+  text-decoration:none !important;
+}}
+.digital-card-btn.line-primary{{
+  color:#fff !important;
+  background:linear-gradient(135deg, #06C755, #20D278);
+  box-shadow:0 10px 24px rgba(6,199,85,0.28);
+}}
+.digital-card-btn.quiz-primary{{
+  color:#fff !important;
+  background:linear-gradient(135deg, var(--accent), var(--accent2));
+  box-shadow:0 10px 24px rgba(255,75,75,0.26);
+}}
+.digital-card-btn.line-secondary{{
+  color:#8BF0B1 !important;
+  border:1px solid rgba(6,199,85,0.62);
+  background:rgba(6,199,85,0.08);
+}}
+.digital-card-btn.quiz-secondary{{
+  color:#FFE0DE !important;
+  border:1px solid rgba(255,105,105,0.55);
+  background:rgba(255,75,75,0.08);
+}}
+.digital-card-note{{
+  color:rgba(255,255,255,0.58) !important;
+  font-size:0.8rem;
+  margin-top:9px;
+}}
 
 /* Glass cards */
 .glass-card{{
@@ -708,6 +789,17 @@ div[data-baseweb="popover"] li{{ color:#fff !important; background:transparent !
   .partner-card{{
     padding:10px 12px !important;
     margin:4px 0 8px 0 !important;
+  }}
+  .digital-card-entry{{
+    padding:13px !important;
+    margin:5px 0 9px !important;
+  }}
+  .digital-card-actions{{
+    grid-template-columns:1fr !important;
+    gap:8px !important;
+  }}
+  .digital-card-btn{{
+    min-height:50px !important;
   }}
   .glass-card{{
     padding:13px 14px !important;
@@ -2203,22 +2295,89 @@ def progress_value(total: int):
     return 1.0
 
 
-def render_sticky_cta(label="➕ 加顧問 LINE 領取完整報告"):
+def line_add_url() -> str:
+    """Return a LINE profile URL without exposing tokens or account internals."""
     line_sid = str(partner.get("line_search_id", "")).strip() or str(
         secret_value("MASTER_LINE_ADD", default="")
     ).strip()
     if not line_sid:
+        return ""
+    encoded_sid = quote(line_sid, safe="")
+    if line_sid.startswith("@"):
+        return f"https://line.me/R/ti/p/{encoded_sid}"
+    return f"https://line.me/ti/p/~{encoded_sid}"
+
+
+def render_digital_card_entry() -> None:
+    """Render the two useful actions a visitor expects from a digital card."""
+    partner_name = str(partner.get("name", "")).strip() or "分享夥伴"
+    line_url = line_add_url()
+    quiz_id = ACQUISITION.forced_quiz or st.session_state.quiz_id
+    quiz_action_label = (
+        "🔮 10 秒生命靈數"
+        if quiz_id == "birthday"
+        else f"🧪 開始{quiz_label(quiz_id)}"
+    )
+    line_first = ACQUISITION.entry == "friend"
+
+    line_button = ""
+    if line_url:
+        line_class = "line-primary" if line_first else "line-secondary"
+        line_button = (
+            f'<a class="digital-card-btn {line_class}" '
+            f'href="{html_escape(line_url)}" target="_blank" rel="noopener">'
+            f"＋ 加入 {html_escape(partner_name)} 的 LINE</a>"
+        )
+        track_event(
+            "digital_card_line_cta_shown",
+            quiz_id=quiz_id,
+            meta={"cta_order": "line_first" if line_first else "quiz_first"},
+            once_key=f"digital_card_line_cta_shown|{quiz_id}",
+        )
+
+    quiz_class = "quiz-secondary" if line_first and line_url else "quiz-primary"
+    quiz_button = (
+        f'<a class="digital-card-btn {quiz_class}" href="#digital-test-entry">'
+        f"{html_escape(quiz_action_label)}</a>"
+    )
+    actions = (
+        f"{line_button}{quiz_button}"
+        if line_first
+        else f"{quiz_button}{line_button}"
+    )
+
+    st.markdown(
+        f"""
+        <div class="digital-card-entry">
+          <div class="digital-card-kicker">DIGITAL BUSINESS CARD</div>
+          <div class="digital-card-title">一張名片，兩種認識方式</div>
+          <div class="digital-card-copy">先保存聯絡方式，或先用短測驗找到一個自然的開場話題。</div>
+          <div class="digital-card-actions">{actions}</div>
+          <div class="digital-card-note">加入 LINE 與測驗都由你自行選擇；測驗結果不設門檻。</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    track_event(
+        "digital_card_viewed",
+        quiz_id=quiz_id,
+        meta={
+            "line_available": bool(line_url),
+            "cta_order": "line_first" if line_first else "quiz_first",
+        },
+        once_key=f"digital_card_viewed|{quiz_id}",
+    )
+
+
+def render_sticky_cta(label="➕ 加顧問 LINE 領取完整報告"):
+    line_url = line_add_url()
+    if not line_url:
         return
     track_event(
         "line_cta_shown",
         quiz_id=st.session_state.quiz_id,
         once_key=f"line_cta_shown|{st.session_state.quiz_id}",
     )
-    if line_sid.startswith("@"):
-        line_url = f"https://line.me/R/ti/p/{line_sid}"
-    else:
-        line_url = f"https://line.me/ti/p/~{line_sid}"
-
     st.markdown(
         f"""
         <div class="sticky-cta-container">
@@ -2259,6 +2418,25 @@ def render_copy_box(text: str, button_label: str, key: str):
     )
 
 
+@st.cache_data(show_spinner=False)
+def make_digital_card_qr_png(target_url: str) -> bytes:
+    """Create a print-ready QR code entirely in memory."""
+    if not HAS_QRCODE or not qrcode:
+        return b""
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=12,
+        border=4,
+    )
+    qr.add_data(str(target_url))
+    qr.make(fit=True)
+    image = qr.make_image(fill_color="#111111", back_color="#FFFFFF").convert("RGB")
+    output = io.BytesIO()
+    image.save(output, format="PNG", optimize=True)
+    return output.getvalue()
+
+
 def render_campaign_share_pack():
     quiz_id = ACQUISITION.forced_quiz or st.session_state.quiz_id
     label = quiz_label(quiz_id)
@@ -2279,6 +2457,29 @@ def render_campaign_share_pack():
             with tab:
                 st.code(pack[platform], language=None)
                 render_copy_box(pack[platform], label, f"campaign_{platform}")
+
+        st.markdown("---")
+        st.markdown("#### 🪪 實體名片專用 QR Code")
+        st.caption("掃描後會開啟你的數位名片，並保留 QR／digital_card 來源追蹤。")
+        card_url = build_digital_card_url(
+            APP_PUBLIC_URL,
+            str(partner.get("ref", "")).strip() or ACQUISITION.ref_input,
+        )
+        qr_png = make_digital_card_qr_png(card_url)
+        if qr_png:
+            st.image(qr_png, width=230)
+            st.download_button(
+                "下載名片 QR Code（PNG）",
+                data=qr_png,
+                file_name="rich-digital-card-qr.png",
+                mime="image/png",
+                key="download_digital_card_qr",
+                use_container_width=True,
+            )
+        else:
+            st.info("QR Code 套件正在部署；仍可先複製下方名片連結。")
+        st.code(card_url, language=None)
+        render_copy_box(card_url, "複製數位名片連結", "digital_card_url")
 
 
 def render_result_share_pack(result_title: str, result_summary: str):
@@ -2515,9 +2716,11 @@ def begin_humanity_quiz() -> None:
 def page_intro():
     render_header()
     show_partner_card()
+    render_digital_card_entry()
     st.progress(0.0)
     track_event("intro_viewed", quiz_id=st.session_state.quiz_id, once_key="intro_viewed")
 
+    st.markdown('<div id="digital-test-entry"></div>', unsafe_allow_html=True)
     st.markdown("---")
     st.markdown("### 🧪 先從最有共鳴的方式認識自己")
     if ACQUISITION.forced_quiz:

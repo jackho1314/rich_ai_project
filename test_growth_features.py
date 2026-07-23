@@ -5,6 +5,7 @@ from growth_features import (
     AcquisitionContext,
     EVENT_COLUMNS,
     build_campaign_share_pack,
+    build_digital_card_url,
     build_event_row,
     build_partner_share_pack,
     build_share_url,
@@ -64,6 +65,15 @@ class GrowthFeaturesTest(unittest.TestCase):
         )
         self.assertEqual(context.forced_quiz, "birthday")
         url = build_share_url("https://example.com/", context, "birthday")
+        self.assertIn("quiz=birthday", url)
+
+    def test_digital_card_url_is_ready_for_printed_qr_tracking(self):
+        url = build_digital_card_url("https://example.com/", "Master")
+
+        self.assertIn("ref=master", url)
+        self.assertIn("src=qr", url)
+        self.assertIn("campaign=digital_card", url)
+        self.assertIn("entry=friend", url)
         self.assertIn("quiz=birthday", url)
 
     def test_share_pack_contains_platform_specific_copy(self):
