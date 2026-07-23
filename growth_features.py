@@ -9,7 +9,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 
 
 ENTRY_MODES = {"friend", "cold", "social"}
-QUIZ_IDS = {"wealth", "health"}
+QUIZ_IDS = {"birthday", "wealth", "health"}
 
 
 def _clean(value: Any, default: str = "") -> str:

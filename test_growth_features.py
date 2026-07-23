@@ -54,6 +54,18 @@ class GrowthFeaturesTest(unittest.TestCase):
         self.assertIn("entry=friend", url)
         self.assertIn("quiz=wealth", url)
 
+    def test_birthday_quiz_is_a_supported_share_entry(self):
+        context = AcquisitionContext.from_values(
+            ref_input="ting",
+            source="ig",
+            campaign="birthday01",
+            entry="social",
+            forced_quiz="birthday",
+        )
+        self.assertEqual(context.forced_quiz, "birthday")
+        url = build_share_url("https://example.com/", context, "birthday")
+        self.assertIn("quiz=birthday", url)
+
     def test_share_pack_contains_platform_specific_copy(self):
         pack = build_partner_share_pack(
             partner_name="Rich",

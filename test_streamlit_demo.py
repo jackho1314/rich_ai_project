@@ -19,7 +19,8 @@ def make_app(*, entry: str = "friend", quiz: str = "wealth") -> AppTest:
     app.query_params["src"] = "line" if entry == "friend" else "ig"
     app.query_params["campaign"] = "qa"
     app.query_params["entry"] = entry
-    app.query_params["quiz"] = quiz
+    if quiz:
+        app.query_params["quiz"] = quiz
     return app
 
 
@@ -28,13 +29,56 @@ def set_result_state(app: AppTest, quiz: str) -> None:
     app.session_state["quiz_id"] = quiz
     app.session_state["u_name"] = "QA訪客"
     app.session_state["u_state"] = "我想提升財富"
-    if quiz == "wealth":
+    if quiz == "birthday":
+        app.session_state["birth_energy"] = 3
+        app.session_state["birth_month"] = 12
+        app.session_state["birth_day"] = 29
+        app.session_state["answers_map"] = {
+            1: 4,
+            2: 3,
+            3: 3,
+            4: 3,
+            5: 3,
+            6: 1,
+            7: 2,
+            8: 2,
+            9: 2,
+            10: 2,
+        }
+    elif quiz == "wealth":
         app.session_state["answers_map"] = {i: "A" for i in range(1, 11)}
     else:
         app.session_state["answers_map"] = {i: 0 for i in range(1, 11)}
 
 
 class StreamlitDemoSmokeTest(unittest.TestCase):
+    def test_default_entry_features_birthday_quiz(self) -> None:
+        app = make_app(quiz="")
+        app.run()
+
+        self.assertEqual(len(app.exception), 0)
+        self.assertEqual(app.session_state["quiz_id"], "birthday")
+        markdown = "\n".join(element.value for element in app.markdown)
+        self.assertIn("生日能量 × 行動性格", markdown)
+        self.assertEqual(
+            app.button(key="start_btn_mobile").label,
+            "🚀 請先選生日月日",
+        )
+        self.assertTrue(app.button(key="start_btn_mobile").disabled)
+
+        app.selectbox(key="birth_month_select_v1").set_value(12).run()
+        app.selectbox(key="birth_day_select_v1").set_value(29).run()
+        self.assertEqual(
+            app.button(key="start_btn_mobile").label,
+            "🚀 立即看我的行動原型",
+        )
+        self.assertFalse(app.button(key="start_btn_mobile").disabled)
+        app.button(key="start_btn_mobile").click().run()
+
+        self.assertEqual(len(app.exception), 0)
+        self.assertEqual(app.session_state["page"], "quiz")
+        self.assertEqual(app.session_state["birth_energy"], 5)
+
     def test_three_entry_messages_render(self) -> None:
         expectations = {
             "friend": "先了解自己，再決定下一步怎麼走",
@@ -53,6 +97,62 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         app = make_app()
         app.session_state["page"] = "quiz"
         app.session_state["quiz_id"] = "wealth"
+        app.session_state["step"] = 1
+        app.session_state["answers_map"] = {}
+        app.run()
+
+        self.assertEqual(len(app.exception), 0)
+        self.assertEqual(len(app.radio), 1)
+        self.assertIsNone(app.radio[0].value)
+        self.assertEqual(
+            [button.label for button in app.button],
+            ["⬅️ 上一題", "下一題 ➡️"],
+        )
+
+    def test_mobile_start_cta_enters_quiz(self) -> None:
+        app = make_app()
+        app.run()
+
+        self.assertEqual(len(app.exception), 0)
+        self.assertEqual(
+            app.button(key="start_btn_mobile").label,
+            "🚀 開始 60 秒探索",
+        )
+
+        app.button(key="start_btn_mobile").click().run()
+
+        self.assertEqual(len(app.exception), 0)
+        self.assertEqual(app.session_state["page"], "quiz")
+        self.assertEqual(app.session_state["step"], 1)
+        self.assertEqual(app.session_state["answers_map"], {})
+
+    def test_birthday_result_is_visible_and_privacy_safe(self) -> None:
+        app = make_app(entry="social", quiz="birthday")
+        set_result_state(app, "birthday")
+        app.run()
+
+        self.assertEqual(len(app.exception), 0)
+        markdown = "\n".join(element.value for element in app.markdown)
+        code = "\n".join(element.value for element in app.code)
+        self.assertIn("靈感型表達者", markdown)
+        self.assertIn("生日核心：3 號", markdown)
+        self.assertIn("完整解析", markdown)
+        self.assertIn("我的行動原型", markdown)
+        self.assertNotIn("12 月 29", code)
+        self.assertEqual(
+            [tab.label for tab in app.tabs],
+            ["LINE", "Instagram", "Facebook", "夥伴跟進"],
+        )
+        self.assertNotIn(
+            "同意儲存結果並通知分享夥伴",
+            [button.label for button in app.button],
+        )
+
+    def test_birthday_quiz_requires_an_explicit_answer(self) -> None:
+        app = make_app(quiz="birthday")
+        app.session_state["page"] = "quiz"
+        app.session_state["quiz_id"] = "birthday"
+        app.session_state["birth_energy"] = 5
         app.session_state["step"] = 1
         app.session_state["answers_map"] = {}
         app.run()

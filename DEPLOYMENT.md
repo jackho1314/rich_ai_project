@@ -1,4 +1,4 @@
-# RICH 成長漏斗 v2 部署說明
+# RICH 成長漏斗 v2.1 部署說明
 
 ## 1. 建立事件工作表
 
@@ -37,7 +37,7 @@ ENABLE_LEGACY_ADMIN_PANEL = false
 ### 夥伴朋友
 
 ```text
-?ref=ting&src=line&campaign=friend01&entry=friend&quiz=wealth
+?ref=ting&src=line&campaign=birthday01&entry=friend&quiz=birthday
 ```
 
 ### 陌生開發
@@ -58,7 +58,10 @@ ENABLE_LEGACY_ADMIN_PANEL = false
 - `src`：`line`、`ig`、`fb`、`qr` 等來源。
 - `campaign`：活動代碼，建議使用短英文與數字。
 - `entry`：`friend`、`cold`、`social`。
-- `quiz`：`wealth` 或 `health`。省略時讓訪客自行選擇。
+- `quiz`：`birthday`、`wealth` 或 `health`。省略時預設進入生日主測驗。
+
+生日主測驗只要求月與日。原始月日只存在當次 Streamlit session，
+不寫入 `events`、`leads`、LINE 通知或社群分享文字；系統只使用推導後的 1–9 號核心。
 
 ## 4. 事件定義
 
@@ -87,7 +90,7 @@ RICH_DEMO_MODE=1 streamlit run app.py --server.address=127.0.0.1 --server.port=8
 再開啟：
 
 ```text
-http://127.0.0.1:8501/?ref=master&src=line&campaign=qa&entry=friend&quiz=wealth
+http://127.0.0.1:8501/?ref=master&src=line&campaign=qa&entry=friend&quiz=birthday
 ```
 
 `RICH_DEMO_MODE` 只從本機環境變數讀取，不能透過公開網址參數開啟。
@@ -95,7 +98,7 @@ http://127.0.0.1:8501/?ref=master&src=line&campaign=qa&entry=friend&quiz=wealth
 ## 6. 驗證
 
 ```bash
-python3 -m py_compile app.py growth_features.py
+python3 -m py_compile app.py birthday_profile.py growth_features.py
 RICH_DEMO_MODE=1 python3 -m unittest discover -v
 streamlit run app.py
 ```

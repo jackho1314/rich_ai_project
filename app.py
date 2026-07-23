@@ -17,6 +17,7 @@ import re
 import time
 import random
 import hashlib
+import calendar
 import sys
 import platform
 import uuid
@@ -39,6 +40,15 @@ from growth_features import (
     build_share_url,
     entry_copy,
 )
+from birthday_profile import (
+    ACTION_CHOICES,
+    ACTION_QUESTIONS,
+    BIRTHDAY_CORES,
+    DIMENSION_ORDER,
+    DIMENSION_PROFILES,
+    compute_action_report,
+    reduce_birth_energy,
+)
 
 # plotly（雷達圖）可選
 try:
@@ -59,7 +69,8 @@ except Exception:
 # =========================
 st.set_page_config(page_title="2026 AI 風格診斷", page_icon="🤖", layout="centered")
 
-APP_VERSION = "growth-funnel-v2.0.2"
+APP_VERSION = "growth-funnel-v2.1.0"
+BIRTHDAY_QUIZ_VERSION = "2026B1-10Q-v1.0"
 WEALTH_QUIZ_VERSION = "2026Q1-10Q-v1.2"
 HEALTH_QUIZ_VERSION = "2026H1-10Q-v1.1"
 DEFAULT_APP_URL = "https://richaiproject-xzwznzb6fdd35n8otuxgha.streamlit.app/"
@@ -146,6 +157,7 @@ def _pkg_ver(pkg_name: str) -> str:
 def _env_meta() -> Dict[str, Any]:
     return {
         "app_version": APP_VERSION,
+        "birthday_quiz_version": BIRTHDAY_QUIZ_VERSION,
         "wealth_quiz_version": WEALTH_QUIZ_VERSION,
         "health_quiz_version": HEALTH_QUIZ_VERSION,
         "python": sys.version.split()[0],
@@ -402,7 +414,7 @@ BADGE_URL = "" if DEMO_MODE else drive_img(BADGE_FILE_ID, width=200)
 # =========================
 # 5) CSS（玻璃卡 + 多巴胺卡 + 黏著 CTA）
 # =========================
-CSS_VERSION = "2026-07-23-growth-v2.0.2"
+CSS_VERSION = "2026-07-23-growth-v2.1.0"
 
 st.markdown(
     f"""
@@ -589,6 +601,11 @@ pre, code{{
   background:linear-gradient(145deg, rgba(255,215,0,0.15), rgba(0,0,0,0));
   box-shadow:0 0 30px rgba(255,215,0,0.20);
 }}
+.card-birthday.active {{
+  border-color:#C89BFF;
+  background:linear-gradient(145deg, rgba(200,155,255,0.20), rgba(255,105,180,0.06));
+  box-shadow:0 0 34px rgba(200,155,255,0.22);
+}}
 .card-health.active {{
   border-color:var(--green);
   background:linear-gradient(145deg, rgba(6,199,85,0.15), rgba(0,0,0,0));
@@ -602,7 +619,47 @@ pre, code{{
   background:rgba(255,255,255,0.10); color:#aaa; margin-bottom:8px; font-weight:900;
 }}
 .card-wealth.active .dopa-title {{ color:var(--gold) !important; }}
+.card-birthday.active .dopa-title {{ color:#E2C8FF !important; }}
 .card-health.active .dopa-title {{ color:var(--green) !important; }}
+
+.featured-quiz {{
+  min-height:0;
+  text-align:left;
+  align-items:flex-start;
+  padding:20px 20px;
+}}
+.featured-quiz .dopa-icon {{ font-size:2.4rem; margin-bottom:4px; }}
+.featured-quiz .dopa-title {{ font-size:1.55rem; }}
+.featured-quiz .dopa-desc {{ font-size:1rem; }}
+.privacy-note {{
+  color:rgba(255,255,255,0.66) !important;
+  font-size:0.88rem;
+  margin-top:8px;
+}}
+.score-grid {{
+  display:grid;
+  grid-template-columns:repeat(5, minmax(0, 1fr));
+  gap:8px;
+  margin:8px 0 18px;
+}}
+.score-item {{
+  padding:10px 8px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,0.12);
+  background:rgba(255,255,255,0.05);
+  text-align:center;
+}}
+.score-label {{
+  color:rgba(255,255,255,0.72) !important;
+  font-size:0.78rem;
+  line-height:1.25;
+}}
+.score-value {{
+  margin-top:4px;
+  color:#E2C8FF !important;
+  font-size:1.05rem;
+  font-weight:1000;
+}}
 
 /* Sticky CTA */
 .sticky-cta-container {{
@@ -622,6 +679,11 @@ pre, code{{
   width:92%; max-width:420px;
 }}
 .sticky-cta-btn:active {{ transform:scale(0.97); }}
+
+/* Intro CTA: inline on desktop, fixed at the bottom on mobile. */
+.st-key-mobile_start_cta {{
+  display:none;
+}}
 
 div[data-baseweb="popover"]{{ z-index:99999 !important; }}
 div[data-baseweb="popover"] [role="listbox"],
@@ -654,8 +716,62 @@ div[data-baseweb="popover"] li{{ color:#fff !important; background:transparent !
     margin:6px 0 8px 0 !important;
   }}
   .glass-hint{{ display:none !important; }}
+  .featured-quiz {{
+    padding:14px 15px !important;
+  }}
+  .featured-quiz .dopa-icon {{
+    font-size:1.85rem !important;
+    margin-bottom:2px !important;
+  }}
+  .featured-quiz .dopa-title {{
+    font-size:1.28rem !important;
+  }}
+  .featured-quiz .dopa-desc {{
+    font-size:0.9rem !important;
+    line-height:1.4 !important;
+  }}
+  .featured-quiz .privacy-note {{
+    display:none !important;
+  }}
+  .score-grid {{
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+  }}
   hr{{ margin:0.9rem 0 !important; }}
   h3{{ font-size:1.3rem !important; }}
+  .st-key-inline_start_cta {{
+    display:none !important;
+  }}
+  .st-key-mobile_start_cta {{
+    display:block !important;
+    position:fixed !important;
+    left:12px !important;
+    right:12px !important;
+    width:auto !important;
+    max-width:none !important;
+    bottom:calc(12px + env(safe-area-inset-bottom)) !important;
+    z-index:99998 !important;
+    padding:9px !important;
+    border:1px solid rgba(255,255,255,0.14) !important;
+    border-radius:20px !important;
+    background:rgba(12,12,20,0.90) !important;
+    box-shadow:0 14px 38px rgba(0,0,0,0.46) !important;
+    backdrop-filter:blur(14px) !important;
+    -webkit-backdrop-filter:blur(14px) !important;
+  }}
+  .st-key-mobile_start_cta [data-testid="stButton"] {{
+    margin:0 !important;
+    width:100% !important;
+  }}
+  .st-key-mobile_start_cta > [data-testid="stElementContainer"] {{
+    width:100% !important;
+    max-width:none !important;
+  }}
+  .st-key-mobile_start_cta button {{
+    width:100% !important;
+    min-height:54px !important;
+    border-radius:15px !important;
+    box-shadow:0 10px 28px rgba(255,75,75,0.34) !important;
+  }}
 }}
 </style>
 """,
@@ -746,7 +862,7 @@ def show_partner_card():
 if "page" not in st.session_state:
     st.session_state.page = "intro"  # intro / quiz / result
 if "quiz_id" not in st.session_state:
-    st.session_state.quiz_id = ACQUISITION.forced_quiz or "wealth"  # wealth / health
+    st.session_state.quiz_id = ACQUISITION.forced_quiz or "birthday"
 if "step" not in st.session_state:
     st.session_state.step = 1
 if "u_name" not in st.session_state:
@@ -757,6 +873,12 @@ if "u_state_other" not in st.session_state:
     st.session_state.u_state_other = ""
 if "answers_map" not in st.session_state:
     st.session_state.answers_map = {}  # {step -> tag/score}
+if "birth_month" not in st.session_state:
+    st.session_state.birth_month = 0
+if "birth_day" not in st.session_state:
+    st.session_state.birth_day = 0
+if "birth_energy" not in st.session_state:
+    st.session_state.birth_energy = 0
 if "u_interest" not in st.session_state:
     st.session_state.u_interest = ""
 if "u_interest_other" not in st.session_state:
@@ -833,6 +955,9 @@ def reset_all(keep_profile: bool = True):
         st.session_state.u_name = ""
         st.session_state.u_state = ""
         st.session_state.u_state_other = ""
+        st.session_state.birth_month = 0
+        st.session_state.birth_day = 0
+        st.session_state.birth_energy = 0
 
 
 # =========================
@@ -1017,6 +1142,59 @@ HEALTH_QUESTIONS = [
     {"id": "HF2", "section": "紅旗", "text": "有便血或劇烈疼痛？", "options": HEALTH_FLAG, "qtype": "flag"},
 ]
 HEALTH_TOTAL = len(HEALTH_QUESTIONS)
+BIRTHDAY_TOTAL = len(ACTION_QUESTIONS)
+
+BIRTHDAY_INTEREST_OPTIONS = [
+    "更了解我的優勢",
+    "改善拖延與卡點",
+    "建立穩定行動節奏",
+    "探索事業與副業方向",
+    "其他（可填）",
+]
+
+BIRTHDAY_OUTRO_BY_INTEREST = {
+    "更了解我的優勢": "可以請 {p_name} 陪你從最有感的優勢開始，找出一個更適合你的使用方式。",
+    "改善拖延與卡點": "你的結果已經指出容易卡住的位置；可以請 {p_name} 陪你把它縮成一個做得到的小步驟。",
+    "建立穩定行動節奏": "你需要的不是逼自己更努力，而是找到能長期維持的節奏；可以請 {p_name} 陪你一起整理。",
+    "探索事業與副業方向": "先從你的核心優勢與行動風格出發，再和 {p_name} 一起排除不適合的路，會比追熱門方向更有效。",
+    "其他（可填）": "你在意的方向很重要；可以把這份結果交給 {p_name}，只針對最有感的一段繼續聊。",
+}
+
+
+def quiz_label(quiz_id: str) -> str:
+    return {
+        "birthday": "生日能量 × 行動性格",
+        "wealth": "財富與行動風格",
+        "health": "健康節奏對帳",
+    }.get(str(quiz_id), "成長風格")
+
+
+def quiz_total(quiz_id: str) -> int:
+    return {
+        "birthday": BIRTHDAY_TOTAL,
+        "wealth": WEALTH_TOTAL,
+        "health": HEALTH_TOTAL,
+    }.get(str(quiz_id), BIRTHDAY_TOTAL)
+
+
+def quiz_card_copy(quiz_id: str) -> Dict[str, str]:
+    return {
+        "birthday": {
+            "icon": "🔮",
+            "title": quiz_label("birthday"),
+            "desc": "用生日核心吸引注意，再用 10 題行動題看見你真正的優勢、盲點與下一步。",
+        },
+        "wealth": {
+            "icon": "🚀",
+            "title": quiz_label("wealth"),
+            "desc": "看見你的行動優勢、卡點與適合的下一步。",
+        },
+        "health": {
+            "icon": "🌿",
+            "title": quiz_label("health"),
+            "desc": "整理睡眠、心情、消化與體力訊號。",
+        },
+    }.get(str(quiz_id), {})
 
 # ✅ section 名稱可能漂移：這裡統一映射回 4 軸
 AXIS_ALIAS = {
@@ -1350,6 +1528,35 @@ def build_wealth_answers_payload(answers_map: dict, meta: Optional[Dict] = None)
     return payload
 
 
+def build_birthday_answers_payload(
+    answers_map: dict,
+    meta: Optional[Dict] = None,
+    report: Optional[Dict] = None,
+) -> dict:
+    """Build an opt-in payload without storing the visitor's raw month/day."""
+    safe_report = {
+        key: value
+        for key, value in dict(report or {}).items()
+        if key not in {"birth_month", "birth_day", "month", "day"}
+    }
+    payload = {"_meta": meta or {}, "_report": safe_report}
+    for i, question in enumerate(ACTION_QUESTIONS, start=1):
+        value = int(answers_map.get(i, 0) or 0)
+        answer = next(
+            (label for label, score in ACTION_CHOICES if int(score) == value),
+            "",
+        )
+        payload[f"q{i}"] = {
+            "id": question["id"],
+            "dimension": question["dimension"],
+            "reverse": bool(question["reverse"]),
+            "question": question["text"],
+            "value": value,
+            "answer": answer,
+        }
+    return payload
+
+
 def build_health_answers_payload(answers_map: dict, meta: Optional[Dict] = None, report: Optional[Dict] = None) -> dict:
     payload = {"_meta": meta or {}, "_report": report or {}}
     for i in range(1, HEALTH_TOTAL + 1):
@@ -1402,6 +1609,27 @@ LEADS_COLS = [
 ]
 
 
+def build_push_message_birthday(
+    *,
+    lead_id: str,
+    report: Dict[str, Any],
+    interest: str,
+) -> str:
+    ref_resolved = str(partner.get("ref", "")).strip()
+    return (
+        f"🚀 新名單報到（{FUNNEL_TAG}/{MODE}）\n"
+        f"🧑‍💼 顧問：{partner.get('name','')}（ref：{ref_resolved}）\n"
+        f"🧪 測驗：birthday\n"
+        f"🆔 lead_id：{lead_id}\n"
+        f"👤 受測者：{st.session_state.u_name}\n"
+        f"✨ 結果：{report.get('combined_title','')}\n"
+        f"🔢 生日核心：{report.get('birth_energy','')}號 {report.get('core_label','')}\n"
+        f"🧭 行動主軸：{report.get('primary_label','')}\n"
+        f"🎯 興趣：{interest}\n"
+        f"🔁 ref_in→ref_ok：{norm_ref(get_qp('ref','master'))} → {ref_resolved}"
+    )
+
+
 def build_push_message_wealth(*, lead_id: str, persona: str, primary: str, secondary: str, interest: str, state: str) -> str:
     p_main = TYPE_SHORT.get(primary, primary)
     p_sec = TYPE_SHORT.get(secondary, secondary) if secondary else ""
@@ -1445,6 +1673,91 @@ def build_push_message_health(*, lead_id: str, report: Dict[str, Any], interest:
         + f"🔁 ref_in→ref_ok：{norm_ref(get_qp('ref','master'))} → {ref_resolved}"
     )
     return msg
+
+
+def write_lead_and_notify_birthday(
+    report: Dict[str, Any],
+    interest: str,
+) -> str:
+    """Persist only the derived core number and action report after opt-in."""
+    tz = timezone(timedelta(hours=8))
+    now_tw = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
+    ref_in = norm_ref(get_qp("ref", "master"))
+    ref_resolved = str(partner.get("ref", "")).strip()
+
+    lead_id = compute_lead_id(
+        "birthday",
+        BIRTHDAY_QUIZ_VERSION,
+        ref_resolved,
+        st.session_state.u_name,
+        "",
+        interest,
+        str(report.get("primary", "")),
+        str(report.get("secondary", "")),
+        FUNNEL_TAG,
+        MODE,
+    )
+    if DEMO_MODE:
+        return f"demo-{lead_id}"
+
+    meta = {
+        "lead_id": lead_id,
+        "quiz_id": "birthday",
+        "quiz_version": BIRTHDAY_QUIZ_VERSION,
+        "ref_input": ref_in,
+        "ref_resolved": ref_resolved,
+        "funnel": FUNNEL_TAG,
+        "mode": MODE,
+        "app_version": APP_VERSION,
+        "session_id": st.session_state.session_id,
+        "source": ACQUISITION.source,
+        "campaign": ACQUISITION.campaign,
+        "entry": ACQUISITION.entry,
+        "birth_energy": int(report.get("birth_energy", 0) or 0),
+    }
+    answers_payload = build_birthday_answers_payload(
+        st.session_state.answers_map,
+        meta=meta,
+        report=report,
+    )
+    row = {
+        "time": now_tw,
+        "ref": ref_resolved,
+        "partner_name": partner.get("name", ""),
+        "client_name": st.session_state.u_name,
+        "client_job": "",
+        "interest": interest,
+        "result": report.get("combined_title", ""),
+        "result_primary": report.get("primary_label", ""),
+        "result_secondary": report.get("secondary_label", ""),
+        "scores": json.dumps(answers_payload, ensure_ascii=False),
+        "keyword": lead_id,
+        "mode": MODE,
+        "funnel": FUNNEL_TAG,
+    }
+    gs_append_row_best_effort(get_conn(), "leads", row, LEADS_COLS)
+
+    line_cfg = secret_value("line", default={}) or {}
+    master_token = str(
+        line_cfg.get("channel_access_token")
+        or secret_value("LINE_CHANNEL_ACCESS_TOKEN", default="")
+    ).strip()
+    master_to_id = str(
+        line_cfg.get("user_id")
+        or secret_value("LINE_USER_ID", default="")
+    ).strip()
+    msg = build_push_message_birthday(
+        lead_id=lead_id,
+        report=report,
+        interest=interest,
+    )
+    push_line(master_token, master_to_id, msg)
+    push_line(
+        str(partner.get("line_token") or "").strip(),
+        str(partner.get("line_id") or "").strip(),
+        msg,
+    )
+    return lead_id
 
 
 def write_lead_and_notify_wealth(primary: str, secondary: str, persona_name: str, counts: Counter, interest: str) -> str:
@@ -1600,7 +1913,52 @@ def write_lead_and_notify_health(report: Dict[str, Any], interest: str) -> str:
 
 
 # =========================
-# 13) LINE「可直接貼」文案（財富）
+# 13) LINE「可直接貼」文案（生日 × 行動性格）
+# =========================
+def build_line_share_text_birthday(
+    *,
+    client_name: str,
+    interest: str,
+    lead_id: str,
+    partner_name: str,
+    report: Dict[str, Any],
+) -> str:
+    lines = [
+        "✨【生日能量 × 行動性格｜結果摘要】",
+        f"👤 {client_name}",
+        f"🔮 我的行動原型：{report.get('combined_title','')}",
+        (
+            f"🔢 生日核心：{report.get('birth_energy','')}號 "
+            f"{report.get('core_emoji','')} {report.get('core_label','')}"
+        ),
+        f"🧭 行動主軸：{report.get('primary_label','')}",
+        "—",
+        f"💬 {report.get('summary','')}",
+        "",
+        "💎 我的三個優勢",
+    ]
+    lines.extend(f"• {strength}" for strength in report.get("strengths", [])[:3])
+    lines.extend(
+        [
+            "",
+            f"👀 容易忽略：{report.get('blind_spot','')}",
+            f"✅ 現在可以做：{report.get('next_action','')}",
+            f"🎯 想繼續探索：{interest}",
+        ]
+    )
+    if lead_id:
+        lines.append(f"🆔 lead_id：{lead_id}")
+    lines.extend(
+        [
+            "—",
+            f"這份測驗由 {partner_name} 分享；完整結果直接看，不用先加好友。",
+        ]
+    )
+    return "\n".join(lines)
+
+
+# =========================
+# 14) LINE「可直接貼」文案（財富）
 # =========================
 def build_line_share_text_wealth(
     *,
@@ -1653,7 +2011,7 @@ def build_line_share_text_wealth(
 
 
 # =========================
-# 14) LINE「可直接貼」文案（健康）
+# 15) LINE「可直接貼」文案（健康）
 # =========================
 def build_line_share_text_health(
     *,
@@ -1739,7 +2097,7 @@ def build_line_share_text_health(
 
 
 # =========================
-# 15) UI：Header / Progress / Sticky CTA / Radar
+# 16) UI：Header / Progress / Sticky CTA / Radar
 # =========================
 def render_header():
     st.caption(ENTRY_UI["eyebrow"])
@@ -1819,11 +2177,11 @@ def render_copy_box(text: str, button_label: str, key: str):
 
 def render_campaign_share_pack():
     quiz_id = ACQUISITION.forced_quiz or st.session_state.quiz_id
-    quiz_label = "財富與行動風格" if quiz_id == "wealth" else "健康節奏對帳"
+    label = quiz_label(quiz_id)
     share_url = build_share_url(APP_PUBLIC_URL, ACQUISITION, quiz_id)
     pack = build_campaign_share_pack(
         partner_name=str(partner.get("name", "")).strip(),
-        quiz_label=quiz_label,
+        quiz_label=label,
         share_url=share_url,
     )
     with st.expander("📣 夥伴分享包｜LINE・IG・FB"):
@@ -1841,12 +2199,12 @@ def render_campaign_share_pack():
 
 def render_result_share_pack(result_title: str, result_summary: str):
     quiz_id = st.session_state.quiz_id
-    quiz_label = "財富與行動風格" if quiz_id == "wealth" else "健康節奏對帳"
+    label = quiz_label(quiz_id)
     share_url = build_share_url(APP_PUBLIC_URL, ACQUISITION, quiz_id)
     pack = build_partner_share_pack(
         partner_name=str(partner.get("name", "")).strip(),
         client_name=st.session_state.u_name,
-        quiz_label=quiz_label,
+        quiz_label=label,
         result_title=result_title,
         result_summary=result_summary,
         share_url=share_url,
@@ -1867,6 +2225,40 @@ def render_result_share_pack(result_title: str, result_summary: str):
         with tab:
             st.code(pack[platform], language=None)
             render_copy_box(pack[platform], label, f"result_{platform}")
+
+
+def render_radar_chart_birthday(scores: Dict[str, int]):
+    values = [int(scores.get(key, 0) or 0) for key in DIMENSION_ORDER]
+    labels = [DIMENSION_PROFILES[key]["label"] for key in DIMENSION_ORDER]
+
+    if HAS_PLOTLY:
+        fig = go.Figure()
+        fig.add_trace(
+            go.Scatterpolar(
+                r=values + [values[0]],
+                theta=labels + [labels[0]],
+                fill="toself",
+                name="你的行動風格",
+            )
+        )
+        fig.update_layout(
+            polar=dict(
+                radialaxis=dict(visible=True, range=[0, 100], showticklabels=False),
+                angularaxis=dict(
+                    categoryorder="array",
+                    categoryarray=labels,
+                    showticklabels=True,
+                ),
+            ),
+            showlegend=False,
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            margin=dict(l=32, r=32, t=20, b=20),
+            height=330,
+        )
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    # The responsive score grid rendered below remains the fallback when
+    # Plotly is unavailable, so no duplicate text list is needed here.
 
 
 def render_radar_chart_wealth(answers_map: Dict[int, str]):
@@ -1948,6 +2340,44 @@ def render_radar_chart_health(sec_scores: Dict[str, int]):
 # =========================
 # 16) Pages
 # =========================
+def begin_quiz(
+    name: str,
+    state_final: str,
+    birth_month: int = 0,
+    birth_day: int = 0,
+) -> bool:
+    if st.session_state.quiz_id == "birthday":
+        try:
+            st.session_state.birth_energy = reduce_birth_energy(
+                birth_month,
+                birth_day,
+            )
+        except (TypeError, ValueError):
+            st.warning("請先選擇正確的出生月與日；不需要填年份。")
+            return False
+        st.session_state.birth_month = int(birth_month)
+        st.session_state.birth_day = int(birth_day)
+
+    st.session_state.u_name = name.strip() or "匿名訪客"
+    if st.session_state.quiz_id == "wealth":
+        st.session_state.u_state = state_final
+
+    st.session_state.page = "quiz"
+    st.session_state.step = 1
+    st.session_state.answers_map = {}
+    st.session_state.notified = False
+    st.session_state.notified_lead_id = ""
+    st.session_state.u_interest = ""
+    st.session_state.u_interest_other = ""
+    track_event(
+        "quiz_started",
+        quiz_id=st.session_state.quiz_id,
+        once_key=f"quiz_started|{st.session_state.quiz_id}",
+    )
+    st.rerun()
+    return True
+
+
 def page_intro():
     render_header()
     show_partner_card()
@@ -1955,67 +2385,124 @@ def page_intro():
     track_event("intro_viewed", quiz_id=st.session_state.quiz_id, once_key="intro_viewed")
 
     st.markdown("---")
-    st.markdown("### 🧪 選擇你現在最想了解的方向")
+    st.markdown("### 🧪 先從最有共鳴的方式認識自己")
     if ACQUISITION.forced_quiz:
         st.session_state.quiz_id = ACQUISITION.forced_quiz
     cur_id = st.session_state.quiz_id
 
     if ACQUISITION.forced_quiz:
-        icon = "🚀" if cur_id == "wealth" else "🌿"
-        title = "財富與行動風格" if cur_id == "wealth" else "健康節奏對帳"
-        desc = (
-            "看見你的行動優勢、卡點與適合的下一步。"
-            if cur_id == "wealth"
-            else "整理睡眠、心情、消化與體力訊號。"
-        )
+        card = quiz_card_copy(cur_id)
         st.markdown(
             f"""
             <div class="glass-card">
-              <div class="glass-title">{icon} {title}</div>
-              <div class="glass-body">{desc}</div>
+              <div class="glass-title">{card["icon"]} {card["title"]}</div>
+              <div class="glass-body">{card["desc"]}</div>
               <div class="glass-hint">已依分享連結直接帶你進入這個主題。</div>
             </div>
             """,
             unsafe_allow_html=True,
         )
     else:
-        c1, c2 = st.columns(2)
-        with c1:
-            active_cls = "active" if cur_id == "wealth" else ""
-            st.markdown(
-                f"""
-                <div class="dopamine-card card-wealth {active_cls}">
-                  <div class="dopa-icon">🚀</div>
-                  <div class="dopa-title">財富與行動風格</div>
-                  <div class="dopa-badge">完整結果直接看</div>
-                  <div class="dopa-desc">看見你的行動優勢、卡點與適合的下一步。</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            if st.button("選擇財富與行動", key="pick_wealth"):
-                st.session_state.quiz_id = "wealth"
-                track_event("quiz_selected", quiz_id="wealth", once_key="quiz_selected|wealth")
+        active_cls = "active" if cur_id == "birthday" else ""
+        st.markdown(
+            f"""
+            <div class="dopamine-card featured-quiz card-birthday {active_cls}">
+              <div class="dopa-icon">🔮</div>
+              <div class="dopa-title">生日能量 × 行動性格</div>
+              <div class="dopa-badge">本月主打｜約 60 秒</div>
+              <div class="dopa-desc">先看你的 1–9 號生日核心，再用 10 題行動題找出真正的優勢、盲點與下一步。</div>
+              <div class="privacy-note">只需月／日，不填年份；完整結果直接看。</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if cur_id != "birthday":
+            if st.button("選擇生日 × 行動性格", key="pick_birthday"):
+                st.session_state.quiz_id = "birthday"
+                track_event(
+                    "quiz_selected",
+                    quiz_id="birthday",
+                    once_key="quiz_selected|birthday",
+                )
                 st.rerun()
 
-        with c2:
-            active_cls = "active" if cur_id == "health" else ""
-            st.markdown(
-                f"""
-                <div class="dopamine-card card-health {active_cls}">
-                  <div class="dopa-icon">🌿</div>
-                  <div class="dopa-title">健康節奏對帳</div>
-                  <div class="dopa-badge">完整結果直接看</div>
-                  <div class="dopa-desc">整理睡眠、心情、消化與體力訊號。</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            if st.button("選擇健康節奏", key="pick_health"):
-                st.session_state.quiz_id = "health"
-                track_event("quiz_selected", quiz_id="health", once_key="quiz_selected|health")
-                st.rerun()
+        with st.expander("更多探索｜財富與健康", expanded=cur_id in {"wealth", "health"}):
+            c1, c2 = st.columns(2)
+            with c1:
+                active_cls = "active" if cur_id == "wealth" else ""
+                st.markdown(
+                    f"""
+                    <div class="dopamine-card card-wealth {active_cls}">
+                      <div class="dopa-icon">🚀</div>
+                      <div class="dopa-title">財富與行動風格</div>
+                      <div class="dopa-badge">完整結果直接看</div>
+                      <div class="dopa-desc">看見你的行動優勢、卡點與適合的下一步。</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                if st.button("選擇財富與行動", key="pick_wealth"):
+                    st.session_state.quiz_id = "wealth"
+                    track_event(
+                        "quiz_selected",
+                        quiz_id="wealth",
+                        once_key="quiz_selected|wealth",
+                    )
+                    st.rerun()
 
+            with c2:
+                active_cls = "active" if cur_id == "health" else ""
+                st.markdown(
+                    f"""
+                    <div class="dopamine-card card-health {active_cls}">
+                      <div class="dopa-icon">🌿</div>
+                      <div class="dopa-title">健康節奏對帳</div>
+                      <div class="dopa-badge">完整結果直接看</div>
+                      <div class="dopa-desc">整理睡眠、心情、消化與體力訊號。</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                if st.button("選擇健康節奏", key="pick_health"):
+                    st.session_state.quiz_id = "health"
+                    track_event(
+                        "quiz_selected",
+                        quiz_id="health",
+                        once_key="quiz_selected|health",
+                    )
+                    st.rerun()
+
+    birth_month = int(st.session_state.birth_month or 0)
+    birth_day = int(st.session_state.birth_day or 0)
+    if st.session_state.quiz_id == "birthday":
+        st.markdown("### 🎂 輸入生日（月／日）")
+        month_col, day_col = st.columns(2)
+        month_options = [0, *range(1, 13)]
+        with month_col:
+            birth_month = st.selectbox(
+                "出生月份",
+                month_options,
+                index=month_options.index(birth_month) if birth_month in month_options else 0,
+                format_func=lambda value: "請選擇月份" if value == 0 else f"{value} 月",
+                key="birth_month_select_v1",
+            )
+        max_day = calendar.monthrange(2000, birth_month)[1] if birth_month else 0
+        day_options = [0, *range(1, max_day + 1)]
+        if birth_day not in day_options:
+            birth_day = 0
+        with day_col:
+            birth_day = st.selectbox(
+                "出生日",
+                day_options,
+                index=day_options.index(birth_day),
+                format_func=lambda value: "請先選月份" if value == 0 else f"{value} 日",
+                key="birth_day_select_v1",
+                disabled=not bool(birth_month),
+            )
+        st.caption("🔒 不需要年份；月日只用來算當次的 1–9 號核心，不會寫入事件追蹤。")
+
+    name = ""
+    state_final = st.session_state.u_state or ""
     with st.expander("選填：讓結果更貼近你", expanded=False):
         name = st.text_input(
             "如何稱呼你？（選填）",
@@ -2043,28 +2530,38 @@ def page_intro():
                 st.session_state.u_state_other = state_other
 
             state_final = normalize_state(state_selection, state_other)
-        else:
+        elif st.session_state.quiz_id != "wealth":
             state_final = st.session_state.u_state or ""
 
     st.caption("免註冊，完整結果直接看；只有主動同意才會建立後續名單。")
-    if st.button(ENTRY_UI["start_label"], key="start_btn"):
-        st.session_state.u_name = name.strip() or "匿名訪客"
-        if st.session_state.quiz_id == "wealth":
-            st.session_state.u_state = state_final
-
-        st.session_state.page = "quiz"
-        st.session_state.step = 1
-        st.session_state.answers_map = {}
-        st.session_state.notified = False
-        st.session_state.notified_lead_id = ""
-        st.session_state.u_interest = ""
-        st.session_state.u_interest_other = ""
-        track_event(
-            "quiz_started",
-            quiz_id=st.session_state.quiz_id,
-            once_key=f"quiz_started|{st.session_state.quiz_id}",
+    start_label = (
+        "立即看我的行動原型"
+        if st.session_state.quiz_id == "birthday"
+        else ENTRY_UI["start_label"]
+    )
+    birthday_ready = (
+        st.session_state.quiz_id != "birthday"
+        or bool(birth_month and birth_day)
+    )
+    start_display_label = (
+        start_label if birthday_ready else "請先選生日月日"
+    )
+    with st.container(key="inline_start_cta"):
+        inline_start_clicked = st.button(
+            start_display_label,
+            key="start_btn",
+            disabled=not birthday_ready,
         )
-        st.rerun()
+
+    with st.container(key="mobile_start_cta"):
+        mobile_start_clicked = st.button(
+            f"🚀 {start_display_label}",
+            key="start_btn_mobile",
+            disabled=not birthday_ready,
+        )
+
+    if inline_start_clicked or mobile_start_clicked:
+        begin_quiz(name, state_final, birth_month, birth_day)
 
     st.markdown("---")
     render_campaign_share_pack()
@@ -2073,8 +2570,9 @@ def page_intro():
 def page_quiz():
     show_partner_card()
 
-    is_wealth = (st.session_state.quiz_id == "wealth")
-    total = WEALTH_TOTAL if is_wealth else HEALTH_TOTAL
+    quiz_id = st.session_state.quiz_id
+    is_wealth = quiz_id == "wealth"
+    total = quiz_total(quiz_id)
     st.progress(progress_value(total))
 
     step = int(st.session_state.step)
@@ -2086,7 +2584,66 @@ def page_quiz():
     )
     st.markdown(f'<div class="quiz-step">第 {step} 題 / 共 {total} 題</div>', unsafe_allow_html=True)
 
-    if is_wealth:
+    if quiz_id == "birthday":
+        question = ACTION_QUESTIONS[step - 1]
+        dimension_label = DIMENSION_PROFILES[question["dimension"]]["label"]
+        st.caption(f"行動風格｜{dimension_label}")
+        st.markdown(
+            f'<div class="quiz-question">{html_escape(question["text"])}</div>',
+            unsafe_allow_html=True,
+        )
+
+        labels = [label for label, _ in ACTION_CHOICES]
+        values = [int(value) for _, value in ACTION_CHOICES]
+        saved_value = st.session_state.answers_map.get(step)
+        default_index = (
+            values.index(int(saved_value))
+            if saved_value is not None and int(saved_value) in values
+            else None
+        )
+        choice_label = st.radio(
+            "請依照平常的自己作答：",
+            labels,
+            index=default_index,
+            key=f"b_{step}",
+        )
+
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("⬅️ 上一題", key=f"b_prev_{step}"):
+                if choice_label:
+                    st.session_state.answers_map[step] = values[
+                        labels.index(choice_label)
+                    ]
+                if step > 1:
+                    st.session_state.step = step - 1
+                else:
+                    st.session_state.page = "intro"
+                st.rerun()
+
+        with c2:
+            btn_txt = "下一題 ➡️" if step < total else "查看我的原型 ✅"
+            if st.button(btn_txt, key=f"b_next_{step}"):
+                if not choice_label:
+                    st.warning("請先選擇一個最接近平常自己的答案。")
+                    st.stop()
+                st.session_state.answers_map[step] = values[
+                    labels.index(choice_label)
+                ]
+                if step < total:
+                    st.session_state.step = step + 1
+                    st.rerun()
+                else:
+                    track_event(
+                        "quiz_completed",
+                        quiz_id=quiz_id,
+                        step=total,
+                        once_key=f"quiz_completed|{quiz_id}",
+                    )
+                    st.session_state.page = "result"
+                    st.rerun()
+
+    elif is_wealth:
         q_txt, opts = WEALTH_QUESTIONS[step - 1]
         st.markdown(f'<div class="quiz-question">{q_txt}</div>', unsafe_allow_html=True)
 
@@ -2252,8 +2809,9 @@ def page_result():
     show_partner_card()
     render_header()
 
-    is_wealth = st.session_state.quiz_id == "wealth"
-    total = WEALTH_TOTAL if is_wealth else HEALTH_TOTAL
+    quiz_id = st.session_state.quiz_id
+    is_wealth = quiz_id == "wealth"
+    total = quiz_total(quiz_id)
     if len(st.session_state.answers_map) < total:
         st.warning("⚠️ 尚未完成全部題目，已返回未完成的位置。")
         st.session_state.page = "quiz"
@@ -2273,7 +2831,119 @@ def page_result():
     p_name = str(partner.get("name", "")).strip() or "分享夥伴"
     render_sticky_cta(label=f"💬 加 LINE 討論這份結果")
 
-    if is_wealth:
+    if quiz_id == "birthday":
+        birth_energy = int(st.session_state.birth_energy or 0)
+        if birth_energy not in BIRTHDAY_CORES:
+            try:
+                birth_energy = reduce_birth_energy(
+                    st.session_state.birth_month,
+                    st.session_state.birth_day,
+                )
+            except (TypeError, ValueError):
+                st.warning("生日核心資料已失效，請重新輸入月日。")
+                st.session_state.page = "intro"
+                st.rerun()
+
+        report = compute_action_report(
+            st.session_state.answers_map,
+            birth_energy,
+        )
+        track_event(
+            "result_viewed",
+            quiz_id="birthday",
+            meta={
+                "birth_energy": report["birth_energy"],
+                "primary": report["primary"],
+                "secondary": report["secondary"],
+            },
+            once_key="result_viewed|birthday",
+        )
+
+        st.markdown(
+            f"### {report['core_emoji']} 你的行動原型：**{report['combined_title']}**"
+        )
+        st.markdown(
+            f"**生日核心：{report['birth_energy']} 號・{report['core_label']}**"
+        )
+        st.write(report["summary"])
+        st.caption("月日不會出現在事件追蹤、名單或分享文字；只保留推導後的核心號碼。")
+
+        st.markdown("#### 📊 五向行動風格")
+        render_radar_chart_birthday(report["scores"])
+        score_items = "".join(
+            (
+                '<div class="score-item">'
+                f'<div class="score-label">{html_escape(DIMENSION_PROFILES[key]["label"])}</div>'
+                f'<div class="score-value">{int(report["scores"][key])}%</div>'
+                "</div>"
+            )
+            for key in DIMENSION_ORDER
+        )
+        st.markdown(
+            f'<div class="score-grid">{score_items}</div>',
+            unsafe_allow_html=True,
+        )
+
+        st.markdown("## 🧠 完整解析")
+        st.markdown("### 💎 你可以信任的三個優勢")
+        for strength in report["strengths"][:3]:
+            st.write(f"• {strength}")
+
+        st.markdown("### 👀 容易忽略的地方")
+        st.write(report["blind_spot"])
+
+        st.markdown(
+            f"""
+            <div class="glass-card">
+              <div class="glass-title">✅ 現在可以做的一步</div>
+              <div class="glass-body">{html_escape(report["next_action"])}</div>
+              <div class="glass-hint">先試一次，再觀察這個方法是否真的適合你。</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            "說明：生日核心是自我探索的趣味提示；行動風格來自 10 題行為題，"
+            "用來協助反思，不是心理或醫療診斷。"
+        )
+
+        st.markdown("---")
+        st.markdown("## 想把結果變成下一步嗎？")
+        interest = render_optional_interest(
+            BIRTHDAY_INTEREST_OPTIONS,
+            "birthday",
+        )
+        if interest:
+            outro_key = _interest_key_for_outro(interest)
+            outro = BIRTHDAY_OUTRO_BY_INTEREST.get(
+                outro_key,
+                BIRTHDAY_OUTRO_BY_INTEREST["其他（可填）"],
+            )
+            st.write(outro.format(p_name=p_name))
+
+        lead_id = save_optional_lead(
+            lambda: write_lead_and_notify_birthday(report, interest),
+            quiz_id="birthday",
+            interest=interest,
+        )
+
+        st.markdown("---")
+        st.markdown("## 🧾 我的行動原型｜可直接貼 LINE")
+        share_text = build_line_share_text_birthday(
+            client_name=st.session_state.u_name,
+            interest=interest or "先保留結果",
+            lead_id=lead_id,
+            partner_name=p_name,
+            report=report,
+        )
+        st.code(share_text, language=None)
+        render_copy_box(share_text, "複製我的行動原型", "birthday_summary")
+        render_result_share_pack(
+            str(report["combined_title"]),
+            str(report["summary"]),
+        )
+
+    elif is_wealth:
         counts = Counter(st.session_state.answers_map.values())
         primary, secondary = pick_primary_secondary(counts)
         persona_name = DB_P.get(primary, primary)
