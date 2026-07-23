@@ -1,40 +1,70 @@
 import unittest
 
-from birthday_profile import compute_action_report, reduce_birth_energy
+from birthday_profile import calculate_life_path, compute_humanity_report
 
 
-class BirthdayProfileTest(unittest.TestCase):
-    def test_birth_energy_uses_month_and_day_only(self):
-        self.assertEqual(reduce_birth_energy(12, 29), 5)
-        self.assertEqual(reduce_birth_energy(3, 3), 6)
+def answers_with_counts(*, tiger: int, dolphin: int, penguin: int, bee: int):
+    values = [1] * tiger + [2] * dolphin + [3] * penguin + [4] * bee
+    return {index: value for index, value in enumerate(values, start=1)}
 
-    def test_birth_energy_validates_calendar_day(self):
+
+class HumanityProfileTest(unittest.TestCase):
+    def test_life_path_uses_full_birth_date(self):
+        self.assertEqual(calculate_life_path(1990, 12, 29), 6)
+        self.assertEqual(calculate_life_path(1991, 12, 29), 7)
+
+    def test_life_path_validates_calendar_date(self):
         with self.assertRaises(ValueError):
-            reduce_birth_energy(2, 30)
+            calculate_life_path(2023, 2, 29)
 
-    def test_action_report_reverse_scores_items(self):
-        answers = {
-            1: 4,
-            2: 3,
-            3: 3,
-            4: 3,
-            5: 3,
-            6: 1,
-            7: 2,
-            8: 2,
-            9: 2,
-            10: 2,
-        }
-        report = compute_action_report(answers, 3)
-        self.assertEqual(report["primary"], "O")
-        self.assertEqual(report["combined_title"], "靈感型表達者")
-        self.assertEqual(report["scores"]["O"], 100)
-        self.assertNotIn("month", report)
-        self.assertNotIn("day", report)
+    def test_seven_is_standard_animal_type(self):
+        report = compute_humanity_report(
+            answers_with_counts(tiger=7, dolphin=5, penguin=4, bee=4),
+            3,
+        )
+        self.assertEqual(report["animal_title"], "老虎")
+        self.assertEqual(report["combined_title"], "3號表達者 × 老虎")
+        self.assertEqual(report["animal_intensity"], "standard")
 
-    def test_action_report_requires_all_ten_answers(self):
+    def test_above_seven_is_big_animal_type(self):
+        report = compute_humanity_report(
+            answers_with_counts(tiger=4, dolphin=4, penguin=4, bee=8),
+            7,
+        )
+        self.assertEqual(report["animal_title"], "大蜜蜂")
+        self.assertEqual(report["combined_title"], "7號洞察者 × 大蜜蜂")
+        self.assertEqual(report["animal_intensity"], "big")
+
+    def test_top_tie_is_visible_as_two_primary_types(self):
+        report = compute_humanity_report(
+            answers_with_counts(tiger=7, dolphin=7, penguin=3, bee=3),
+            2,
+        )
+        self.assertTrue(report["is_mixed"])
+        self.assertEqual(report["animal_title"], "老虎 × 海豚")
+        self.assertEqual(report["primary"], "tiger")
+        self.assertEqual(report["secondary"], "dolphin")
+
+    def test_balanced_scores_are_octopus(self):
+        report = compute_humanity_report(
+            answers_with_counts(tiger=5, dolphin=5, penguin=5, bee=5),
+            9,
+        )
+        self.assertEqual(report["animal_title"], "八爪")
+        self.assertEqual(report["primary"], "octopus")
+        self.assertEqual(report["animal_intensity"], "balanced")
+
+    def test_report_requires_all_twenty_answers(self):
         with self.assertRaises(ValueError):
-            compute_action_report({1: 4}, 1)
+            compute_humanity_report({1: 1}, 1)
+
+    def test_report_never_contains_raw_birth_date(self):
+        report = compute_humanity_report(
+            answers_with_counts(tiger=8, dolphin=4, penguin=4, bee=4),
+            6,
+        )
+        for forbidden in ("birth_year", "birth_month", "birth_day", "year", "month", "day"):
+            self.assertNotIn(forbidden, report)
 
 
 if __name__ == "__main__":

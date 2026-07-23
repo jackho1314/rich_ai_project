@@ -30,20 +30,14 @@ def set_result_state(app: AppTest, quiz: str) -> None:
     app.session_state["u_name"] = "QA訪客"
     app.session_state["u_state"] = "我想提升財富"
     if quiz == "birthday":
-        app.session_state["birth_energy"] = 3
+        app.session_state["life_path"] = 7
+        app.session_state["birth_energy"] = 7
+        app.session_state["birth_year"] = 1991
         app.session_state["birth_month"] = 12
         app.session_state["birth_day"] = 29
+        values = [4] * 8 + [1] * 4 + [2] * 4 + [3] * 4
         app.session_state["answers_map"] = {
-            1: 4,
-            2: 3,
-            3: 3,
-            4: 3,
-            5: 3,
-            6: 1,
-            7: 2,
-            8: 2,
-            9: 2,
-            10: 2,
+            index: value for index, value in enumerate(values, start=1)
         }
     elif quiz == "wealth":
         app.session_state["answers_map"] = {i: "A" for i in range(1, 11)}
@@ -59,25 +53,26 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertEqual(len(app.exception), 0)
         self.assertEqual(app.session_state["quiz_id"], "birthday")
         markdown = "\n".join(element.value for element in app.markdown)
-        self.assertIn("生日能量 × 行動性格", markdown)
+        self.assertIn("生命靈數 × 人性動物原型", markdown)
         self.assertEqual(
             app.button(key="start_btn_mobile").label,
-            "🚀 請先選生日月日",
+            "🚀 請先選完整生日",
         )
         self.assertTrue(app.button(key="start_btn_mobile").disabled)
 
-        app.selectbox(key="birth_month_select_v1").set_value(12).run()
-        app.selectbox(key="birth_day_select_v1").set_value(29).run()
+        app.selectbox(key="birth_year_select_v2").set_value(1990).run()
+        app.selectbox(key="birth_month_select_v2").set_value(12).run()
+        app.selectbox(key="birth_day_select_v2").set_value(29).run()
         self.assertEqual(
             app.button(key="start_btn_mobile").label,
-            "🚀 立即看我的行動原型",
+            "🚀 立即探索我的生命原型",
         )
         self.assertFalse(app.button(key="start_btn_mobile").disabled)
         app.button(key="start_btn_mobile").click().run()
 
         self.assertEqual(len(app.exception), 0)
         self.assertEqual(app.session_state["page"], "quiz")
-        self.assertEqual(app.session_state["birth_energy"], 5)
+        self.assertEqual(app.session_state["life_path"], 6)
 
     def test_three_entry_messages_render(self) -> None:
         expectations = {
@@ -116,7 +111,7 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertEqual(len(app.exception), 0)
         self.assertEqual(
             app.button(key="start_btn_mobile").label,
-            "🚀 開始 60 秒探索",
+            "🚀 開始 2 分鐘探索",
         )
 
         app.button(key="start_btn_mobile").click().run()
@@ -134,11 +129,12 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertEqual(len(app.exception), 0)
         markdown = "\n".join(element.value for element in app.markdown)
         code = "\n".join(element.value for element in app.code)
-        self.assertIn("靈感型表達者", markdown)
-        self.assertIn("生日核心：3 號", markdown)
+        self.assertIn("7號洞察者 × 大蜜蜂", markdown)
+        self.assertIn("生命靈數 7 號", markdown)
         self.assertIn("完整解析", markdown)
-        self.assertIn("我的行動原型", markdown)
+        self.assertIn("我的生命原型", markdown)
         self.assertNotIn("12 月 29", code)
+        self.assertNotIn("1991", code)
         self.assertEqual(
             [tab.label for tab in app.tabs],
             ["LINE", "Instagram", "Facebook", "夥伴跟進"],
@@ -152,6 +148,7 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         app = make_app(quiz="birthday")
         app.session_state["page"] = "quiz"
         app.session_state["quiz_id"] = "birthday"
+        app.session_state["life_path"] = 5
         app.session_state["birth_energy"] = 5
         app.session_state["step"] = 1
         app.session_state["answers_map"] = {}

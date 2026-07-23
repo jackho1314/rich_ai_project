@@ -1,4 +1,4 @@
-# RICH 成長漏斗 v2.1 部署說明
+# RICH 成長漏斗 v3.0 部署說明
 
 ## 1. 建立事件工作表
 
@@ -60,8 +60,9 @@ ENABLE_LEGACY_ADMIN_PANEL = false
 - `entry`：`friend`、`cold`、`social`。
 - `quiz`：`birthday`、`wealth` 或 `health`。省略時預設進入生日主測驗。
 
-生日主測驗只要求月與日。原始月日只存在當次 Streamlit session，
-不寫入 `events`、`leads`、LINE 通知或社群分享文字；系統只使用推導後的 1–9 號核心。
+生命靈數主測驗會要求完整年、月、日，以標準日期數字推導 1–9 號生命靈數。
+原始生日只存在當次 Streamlit session，不寫入 `events`、`leads`、LINE 通知或
+社群分享文字；系統只使用推導後的生命靈數與動物原型。
 
 ## 4. 事件定義
 

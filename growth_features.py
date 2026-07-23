@@ -59,7 +59,7 @@ def entry_copy(context: AcquisitionContext, partner_name: str) -> Dict[str, str]
     if context.entry == "social":
         source_label = context.source.upper() if context.source != "direct" else "社群"
         return {
-            "eyebrow": f"來自 {source_label} 的 60 秒探索",
+            "eyebrow": f"來自 {source_label} 的 2 分鐘探索",
             "title": "快速看見你現在最值得優先調整的一步",
             "subtitle": "免註冊、結果直接看；完成後也可以把結果分享給朋友。",
             "partner_kicker": "內容分享夥伴",
@@ -70,7 +70,7 @@ def entry_copy(context: AcquisitionContext, partner_name: str) -> Dict[str, str]
         "title": "先了解自己，再決定下一步怎麼走",
         "subtitle": "這不是推銷表單。完成後會直接看到完整解析，再由你決定是否聯絡分享人。",
         "partner_kicker": "分享這份測驗給你的人",
-        "start_label": "開始 60 秒探索",
+            "start_label": "開始 2 分鐘探索",
     }
 
 
@@ -154,7 +154,7 @@ def build_campaign_share_pack(
             f"{url_line}"
         ),
         "instagram": (
-            f"60 秒看見你的「{quiz}」✨\n"
+            f"2 分鐘看見你的「{quiz}」✨\n"
             "完整結果直接看｜免註冊｜由你決定要不要繼續聊\n\n"
             "測驗連結放在個人簡介／限動連結。\n"
             "#自我探索 #行動風格 #成長工具"

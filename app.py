@@ -17,7 +17,6 @@ import re
 import time
 import random
 import hashlib
-import calendar
 import sys
 import platform
 import uuid
@@ -41,13 +40,11 @@ from growth_features import (
     entry_copy,
 )
 from birthday_profile import (
-    ACTION_CHOICES,
-    ACTION_QUESTIONS,
+    ANIMAL_PROFILES,
     BIRTHDAY_CORES,
-    DIMENSION_ORDER,
-    DIMENSION_PROFILES,
-    compute_action_report,
-    reduce_birth_energy,
+    HUMANITY_QUESTIONS,
+    calculate_life_path,
+    compute_humanity_report,
 )
 
 # plotly（雷達圖）可選
@@ -69,8 +66,8 @@ except Exception:
 # =========================
 st.set_page_config(page_title="2026 AI 風格診斷", page_icon="🤖", layout="centered")
 
-APP_VERSION = "growth-funnel-v2.1.0"
-BIRTHDAY_QUIZ_VERSION = "2026B1-10Q-v1.0"
+APP_VERSION = "growth-funnel-v3.0.0"
+BIRTHDAY_QUIZ_VERSION = "2026HUM1-20Q-v1.0"
 WEALTH_QUIZ_VERSION = "2026Q1-10Q-v1.2"
 HEALTH_QUIZ_VERSION = "2026H1-10Q-v1.1"
 DEFAULT_APP_URL = "https://richaiproject-xzwznzb6fdd35n8otuxgha.streamlit.app/"
@@ -772,6 +769,20 @@ div[data-baseweb="popover"] li{{ color:#fff !important; background:transparent !
     border-radius:15px !important;
     box-shadow:0 10px 28px rgba(255,75,75,0.34) !important;
   }}
+  .st-key-birthday_quiz_nav [data-testid="stHorizontalBlock"] {{
+    flex-wrap:nowrap !important;
+    gap:0.7rem !important;
+  }}
+  .st-key-birthday_quiz_nav [data-testid="stColumn"] {{
+    flex:1 1 0 !important;
+    width:calc(50% - 0.35rem) !important;
+    min-width:0 !important;
+  }}
+  .st-key-birthday_quiz_nav button {{
+    min-height:54px !important;
+    padding:0.75rem 0.45rem !important;
+    font-size:0.98rem !important;
+  }}
 }}
 </style>
 """,
@@ -877,8 +888,12 @@ if "birth_month" not in st.session_state:
     st.session_state.birth_month = 0
 if "birth_day" not in st.session_state:
     st.session_state.birth_day = 0
+if "birth_year" not in st.session_state:
+    st.session_state.birth_year = 0
 if "birth_energy" not in st.session_state:
     st.session_state.birth_energy = 0
+if "life_path" not in st.session_state:
+    st.session_state.life_path = 0
 if "u_interest" not in st.session_state:
     st.session_state.u_interest = ""
 if "u_interest_other" not in st.session_state:
@@ -955,9 +970,11 @@ def reset_all(keep_profile: bool = True):
         st.session_state.u_name = ""
         st.session_state.u_state = ""
         st.session_state.u_state_other = ""
+        st.session_state.birth_year = 0
         st.session_state.birth_month = 0
         st.session_state.birth_day = 0
         st.session_state.birth_energy = 0
+        st.session_state.life_path = 0
 
 
 # =========================
@@ -1142,7 +1159,7 @@ HEALTH_QUESTIONS = [
     {"id": "HF2", "section": "紅旗", "text": "有便血或劇烈疼痛？", "options": HEALTH_FLAG, "qtype": "flag"},
 ]
 HEALTH_TOTAL = len(HEALTH_QUESTIONS)
-BIRTHDAY_TOTAL = len(ACTION_QUESTIONS)
+BIRTHDAY_TOTAL = len(HUMANITY_QUESTIONS)
 
 BIRTHDAY_INTEREST_OPTIONS = [
     "更了解我的優勢",
@@ -1163,7 +1180,7 @@ BIRTHDAY_OUTRO_BY_INTEREST = {
 
 def quiz_label(quiz_id: str) -> str:
     return {
-        "birthday": "生日能量 × 行動性格",
+        "birthday": "生命靈數 × 人性動物原型",
         "wealth": "財富與行動風格",
         "health": "健康節奏對帳",
     }.get(str(quiz_id), "成長風格")
@@ -1182,7 +1199,7 @@ def quiz_card_copy(quiz_id: str) -> Dict[str, str]:
         "birthday": {
             "icon": "🔮",
             "title": quiz_label("birthday"),
-            "desc": "用生日核心吸引注意，再用 10 題行動題看見你真正的優勢、盲點與下一步。",
+            "desc": "用完整生日算出生命靈數，再用團隊 20 題看見你的老虎、海豚、企鵝、蜜蜂或八爪風格。",
         },
         "wealth": {
             "icon": "🚀",
@@ -1533,26 +1550,41 @@ def build_birthday_answers_payload(
     meta: Optional[Dict] = None,
     report: Optional[Dict] = None,
 ) -> dict:
-    """Build an opt-in payload without storing the visitor's raw month/day."""
+    """Build an opt-in payload without storing the visitor's raw birth date."""
     safe_report = {
         key: value
         for key, value in dict(report or {}).items()
-        if key not in {"birth_month", "birth_day", "month", "day"}
+        if key
+        not in {
+            "birth_year",
+            "birth_month",
+            "birth_day",
+            "year",
+            "month",
+            "day",
+        }
     }
     payload = {"_meta": meta or {}, "_report": safe_report}
-    for i, question in enumerate(ACTION_QUESTIONS, start=1):
+    for i, question in enumerate(HUMANITY_QUESTIONS, start=1):
         value = int(answers_map.get(i, 0) or 0)
         answer = next(
-            (label for label, score in ACTION_CHOICES if int(score) == value),
+            (
+                label
+                for label, score in question["options"]
+                if int(score) == value
+            ),
             "",
         )
         payload[f"q{i}"] = {
             "id": question["id"],
-            "dimension": question["dimension"],
-            "reverse": bool(question["reverse"]),
             "question": question["text"],
             "value": value,
             "answer": answer,
+            "animal": (
+                ANIMAL_PROFILES[value]["label"]
+                if value in ANIMAL_PROFILES
+                else ""
+            ),
         }
     return payload
 
@@ -1623,8 +1655,8 @@ def build_push_message_birthday(
         f"🆔 lead_id：{lead_id}\n"
         f"👤 受測者：{st.session_state.u_name}\n"
         f"✨ 結果：{report.get('combined_title','')}\n"
-        f"🔢 生日核心：{report.get('birth_energy','')}號 {report.get('core_label','')}\n"
-        f"🧭 行動主軸：{report.get('primary_label','')}\n"
+        f"🔢 生命靈數：{report.get('life_path','')}號 {report.get('core_label','')}\n"
+        f"🐾 動物原型：{report.get('animal_title','')}\n"
         f"🎯 興趣：{interest}\n"
         f"🔁 ref_in→ref_ok：{norm_ref(get_qp('ref','master'))} → {ref_resolved}"
     )
@@ -1679,7 +1711,7 @@ def write_lead_and_notify_birthday(
     report: Dict[str, Any],
     interest: str,
 ) -> str:
-    """Persist only the derived core number and action report after opt-in."""
+    """Persist only the derived life-path number and humanity report after opt-in."""
     tz = timezone(timedelta(hours=8))
     now_tw = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
     ref_in = norm_ref(get_qp("ref", "master"))
@@ -1713,7 +1745,10 @@ def write_lead_and_notify_birthday(
         "source": ACQUISITION.source,
         "campaign": ACQUISITION.campaign,
         "entry": ACQUISITION.entry,
-        "birth_energy": int(report.get("birth_energy", 0) or 0),
+        "life_path": int(report.get("life_path", 0) or 0),
+        "animal_primary": str(report.get("primary", "")),
+        "animal_secondary": str(report.get("secondary", "")),
+        "animal_intensity": str(report.get("animal_intensity", "")),
     }
     answers_payload = build_birthday_answers_payload(
         st.session_state.answers_map,
@@ -1913,7 +1948,7 @@ def write_lead_and_notify_health(report: Dict[str, Any], interest: str) -> str:
 
 
 # =========================
-# 13) LINE「可直接貼」文案（生日 × 行動性格）
+# 13) LINE「可直接貼」文案（生命靈數 × 人性動物原型）
 # =========================
 def build_line_share_text_birthday(
     *,
@@ -1924,14 +1959,14 @@ def build_line_share_text_birthday(
     report: Dict[str, Any],
 ) -> str:
     lines = [
-        "✨【生日能量 × 行動性格｜結果摘要】",
+        "✨【生命靈數 × 人性動物原型｜結果摘要】",
         f"👤 {client_name}",
-        f"🔮 我的行動原型：{report.get('combined_title','')}",
+        f"🔮 我的生命原型：{report.get('combined_title','')}",
         (
-            f"🔢 生日核心：{report.get('birth_energy','')}號 "
+            f"🔢 生命靈數：{report.get('life_path','')}號 "
             f"{report.get('core_emoji','')} {report.get('core_label','')}"
         ),
-        f"🧭 行動主軸：{report.get('primary_label','')}",
+        f"🐾 團隊溝通風格：{report.get('animal_emoji','')} {report.get('animal_title','')}",
         "—",
         f"💬 {report.get('summary','')}",
         "",
@@ -1942,6 +1977,7 @@ def build_line_share_text_birthday(
         [
             "",
             f"👀 容易忽略：{report.get('blind_spot','')}",
+            f"🤝 和我合作：{report.get('collaboration','')}",
             f"✅ 現在可以做：{report.get('next_action','')}",
             f"🎯 想繼續探索：{interest}",
         ]
@@ -2228,8 +2264,8 @@ def render_result_share_pack(result_title: str, result_summary: str):
 
 
 def render_radar_chart_birthday(scores: Dict[str, int]):
-    values = [int(scores.get(key, 0) or 0) for key in DIMENSION_ORDER]
-    labels = [DIMENSION_PROFILES[key]["label"] for key in DIMENSION_ORDER]
+    labels = [ANIMAL_PROFILES[key]["label"] for key in (1, 2, 3, 4)]
+    values = [int(scores.get(label, 0) or 0) for label in labels]
 
     if HAS_PLOTLY:
         fig = go.Figure()
@@ -2238,12 +2274,17 @@ def render_radar_chart_birthday(scores: Dict[str, int]):
                 r=values + [values[0]],
                 theta=labels + [labels[0]],
                 fill="toself",
-                name="你的行動風格",
+                name="你的人性動物原型",
             )
         )
         fig.update_layout(
             polar=dict(
-                radialaxis=dict(visible=True, range=[0, 100], showticklabels=False),
+                radialaxis=dict(
+                    visible=True,
+                    range=[0, max(8, max(values, default=0))],
+                    dtick=2,
+                    showticklabels=False,
+                ),
                 angularaxis=dict(
                     categoryorder="array",
                     categoryarray=labels,
@@ -2343,18 +2384,23 @@ def render_radar_chart_health(sec_scores: Dict[str, int]):
 def begin_quiz(
     name: str,
     state_final: str,
+    birth_year: int = 0,
     birth_month: int = 0,
     birth_day: int = 0,
 ) -> bool:
     if st.session_state.quiz_id == "birthday":
         try:
-            st.session_state.birth_energy = reduce_birth_energy(
+            life_path = calculate_life_path(
+                birth_year,
                 birth_month,
                 birth_day,
             )
         except (TypeError, ValueError):
-            st.warning("請先選擇正確的出生月與日；不需要填年份。")
+            st.warning("請先選擇正確的出生年月日。")
             return False
+        st.session_state.life_path = life_path
+        st.session_state.birth_energy = life_path
+        st.session_state.birth_year = int(birth_year)
         st.session_state.birth_month = int(birth_month)
         st.session_state.birth_day = int(birth_day)
 
@@ -2408,16 +2454,16 @@ def page_intro():
             f"""
             <div class="dopamine-card featured-quiz card-birthday {active_cls}">
               <div class="dopa-icon">🔮</div>
-              <div class="dopa-title">生日能量 × 行動性格</div>
-              <div class="dopa-badge">本月主打｜約 60 秒</div>
-              <div class="dopa-desc">先看你的 1–9 號生日核心，再用 10 題行動題找出真正的優勢、盲點與下一步。</div>
-              <div class="privacy-note">只需月／日，不填年份；完整結果直接看。</div>
+              <div class="dopa-title">生命靈數 × 人性動物原型</div>
+              <div class="dopa-badge">本月主打｜約 2 分鐘</div>
+              <div class="dopa-desc">完整生日看 1–9 號內在動力，再用團隊 20 題找出老虎、海豚、企鵝、蜜蜂或八爪溝通風格。</div>
+              <div class="privacy-note">完整生日只用於當次計算；結果免註冊、直接看。</div>
             </div>
             """,
             unsafe_allow_html=True,
         )
         if cur_id != "birthday":
-            if st.button("選擇生日 × 行動性格", key="pick_birthday"):
+            if st.button("選擇生命靈數 × 動物原型", key="pick_birthday"):
                 st.session_state.quiz_id = "birthday"
                 track_event(
                     "quiz_selected",
@@ -2472,11 +2518,22 @@ def page_intro():
                     )
                     st.rerun()
 
+    birth_year = int(st.session_state.birth_year or 0)
     birth_month = int(st.session_state.birth_month or 0)
     birth_day = int(st.session_state.birth_day or 0)
     if st.session_state.quiz_id == "birthday":
-        st.markdown("### 🎂 輸入生日（月／日）")
-        month_col, day_col = st.columns(2)
+        st.markdown("### 🎂 輸入完整生日")
+        year_col, month_col, day_col = st.columns(3)
+        current_year = datetime.now().year
+        year_options = [0, *range(current_year, 1919, -1)]
+        with year_col:
+            birth_year = st.selectbox(
+                "出生年份",
+                year_options,
+                index=year_options.index(birth_year) if birth_year in year_options else 0,
+                format_func=lambda value: "請選擇年份" if value == 0 else f"{value} 年",
+                key="birth_year_select_v2",
+            )
         month_options = [0, *range(1, 13)]
         with month_col:
             birth_month = st.selectbox(
@@ -2484,22 +2541,19 @@ def page_intro():
                 month_options,
                 index=month_options.index(birth_month) if birth_month in month_options else 0,
                 format_func=lambda value: "請選擇月份" if value == 0 else f"{value} 月",
-                key="birth_month_select_v1",
+                key="birth_month_select_v2",
             )
-        max_day = calendar.monthrange(2000, birth_month)[1] if birth_month else 0
-        day_options = [0, *range(1, max_day + 1)]
-        if birth_day not in day_options:
-            birth_day = 0
+        day_options = [0, *range(1, 32)]
         with day_col:
             birth_day = st.selectbox(
                 "出生日",
                 day_options,
-                index=day_options.index(birth_day),
-                format_func=lambda value: "請先選月份" if value == 0 else f"{value} 日",
-                key="birth_day_select_v1",
+                index=day_options.index(birth_day) if birth_day in day_options else 0,
+                format_func=lambda value: "請選擇日期" if value == 0 else f"{value} 日",
+                key="birth_day_select_v2",
                 disabled=not bool(birth_month),
             )
-        st.caption("🔒 不需要年份；月日只用來算當次的 1–9 號核心，不會寫入事件追蹤。")
+        st.caption("🔒 年、月、日只留在這次瀏覽階段，用於推導生命靈數；不會寫入事件追蹤、名單或分享文字。")
 
     name = ""
     state_final = st.session_state.u_state or ""
@@ -2535,16 +2589,16 @@ def page_intro():
 
     st.caption("免註冊，完整結果直接看；只有主動同意才會建立後續名單。")
     start_label = (
-        "立即看我的行動原型"
+        "立即探索我的生命原型"
         if st.session_state.quiz_id == "birthday"
         else ENTRY_UI["start_label"]
     )
     birthday_ready = (
         st.session_state.quiz_id != "birthday"
-        or bool(birth_month and birth_day)
+        or bool(birth_year and birth_month and birth_day)
     )
     start_display_label = (
-        start_label if birthday_ready else "請先選生日月日"
+        start_label if birthday_ready else "請先選完整生日"
     )
     with st.container(key="inline_start_cta"):
         inline_start_clicked = st.button(
@@ -2561,7 +2615,7 @@ def page_intro():
         )
 
     if inline_start_clicked or mobile_start_clicked:
-        begin_quiz(name, state_final, birth_month, birth_day)
+        begin_quiz(name, state_final, birth_year, birth_month, birth_day)
 
     st.markdown("---")
     render_campaign_share_pack()
@@ -2585,16 +2639,15 @@ def page_quiz():
     st.markdown(f'<div class="quiz-step">第 {step} 題 / 共 {total} 題</div>', unsafe_allow_html=True)
 
     if quiz_id == "birthday":
-        question = ACTION_QUESTIONS[step - 1]
-        dimension_label = DIMENSION_PROFILES[question["dimension"]]["label"]
-        st.caption(f"行動風格｜{dimension_label}")
+        question = HUMANITY_QUESTIONS[step - 1]
+        st.caption("人性探索｜請依照平常最自然的反應作答")
         st.markdown(
             f'<div class="quiz-question">{html_escape(question["text"])}</div>',
             unsafe_allow_html=True,
         )
 
-        labels = [label for label, _ in ACTION_CHOICES]
-        values = [int(value) for _, value in ACTION_CHOICES]
+        labels = [label for label, _ in question["options"]]
+        values = [int(value) for _, value in question["options"]]
         saved_value = st.session_state.answers_map.get(step)
         default_index = (
             values.index(int(saved_value))
@@ -2602,46 +2655,47 @@ def page_quiz():
             else None
         )
         choice_label = st.radio(
-            "請依照平常的自己作答：",
+            "請選擇最像你的選項：",
             labels,
             index=default_index,
             key=f"b_{step}",
         )
 
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("⬅️ 上一題", key=f"b_prev_{step}"):
-                if choice_label:
+        with st.container(key="birthday_quiz_nav"):
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("⬅️ 上一題", key=f"b_prev_{step}"):
+                    if choice_label:
+                        st.session_state.answers_map[step] = values[
+                            labels.index(choice_label)
+                        ]
+                    if step > 1:
+                        st.session_state.step = step - 1
+                    else:
+                        st.session_state.page = "intro"
+                    st.rerun()
+
+            with c2:
+                btn_txt = "下一題 ➡️" if step < total else "查看我的生命原型 ✅"
+                if st.button(btn_txt, key=f"b_next_{step}"):
+                    if not choice_label:
+                        st.warning("請先選擇一個最接近平常自己的答案。")
+                        st.stop()
                     st.session_state.answers_map[step] = values[
                         labels.index(choice_label)
                     ]
-                if step > 1:
-                    st.session_state.step = step - 1
-                else:
-                    st.session_state.page = "intro"
-                st.rerun()
-
-        with c2:
-            btn_txt = "下一題 ➡️" if step < total else "查看我的原型 ✅"
-            if st.button(btn_txt, key=f"b_next_{step}"):
-                if not choice_label:
-                    st.warning("請先選擇一個最接近平常自己的答案。")
-                    st.stop()
-                st.session_state.answers_map[step] = values[
-                    labels.index(choice_label)
-                ]
-                if step < total:
-                    st.session_state.step = step + 1
-                    st.rerun()
-                else:
-                    track_event(
-                        "quiz_completed",
-                        quiz_id=quiz_id,
-                        step=total,
-                        once_key=f"quiz_completed|{quiz_id}",
-                    )
-                    st.session_state.page = "result"
-                    st.rerun()
+                    if step < total:
+                        st.session_state.step = step + 1
+                        st.rerun()
+                    else:
+                        track_event(
+                            "quiz_completed",
+                            quiz_id=quiz_id,
+                            step=total,
+                            once_key=f"quiz_completed|{quiz_id}",
+                        )
+                        st.session_state.page = "result"
+                        st.rerun()
 
     elif is_wealth:
         q_txt, opts = WEALTH_QUESTIONS[step - 1]
@@ -2832,52 +2886,55 @@ def page_result():
     render_sticky_cta(label=f"💬 加 LINE 討論這份結果")
 
     if quiz_id == "birthday":
-        birth_energy = int(st.session_state.birth_energy or 0)
-        if birth_energy not in BIRTHDAY_CORES:
+        life_path = int(st.session_state.life_path or st.session_state.birth_energy or 0)
+        if life_path not in BIRTHDAY_CORES:
             try:
-                birth_energy = reduce_birth_energy(
+                life_path = calculate_life_path(
+                    st.session_state.birth_year,
                     st.session_state.birth_month,
                     st.session_state.birth_day,
                 )
             except (TypeError, ValueError):
-                st.warning("生日核心資料已失效，請重新輸入月日。")
+                st.warning("生命靈數資料已失效，請重新輸入完整生日。")
                 st.session_state.page = "intro"
                 st.rerun()
 
-        report = compute_action_report(
+        report = compute_humanity_report(
             st.session_state.answers_map,
-            birth_energy,
+            life_path,
         )
         track_event(
             "result_viewed",
             quiz_id="birthday",
             meta={
-                "birth_energy": report["birth_energy"],
-                "primary": report["primary"],
-                "secondary": report["secondary"],
+                "life_path": report["life_path"],
+                "animal_primary": report["primary"],
+                "animal_secondary": report["secondary"],
+                "animal_intensity": report["animal_intensity"],
             },
             once_key="result_viewed|birthday",
         )
 
         st.markdown(
-            f"### {report['core_emoji']} 你的行動原型：**{report['combined_title']}**"
+            f"### {report['core_emoji']}{report['animal_emoji']} 你的生命原型：**{report['combined_title']}**"
         )
         st.markdown(
-            f"**生日核心：{report['birth_energy']} 號・{report['core_label']}**"
+            f"**內在動力：生命靈數 {report['life_path']} 號・{report['core_label']}**"
         )
+        st.markdown(f"**外在／團隊風格：{report['animal_title']}**")
         st.write(report["summary"])
-        st.caption("月日不會出現在事件追蹤、名單或分享文字；只保留推導後的核心號碼。")
+        st.caption("完整生日不會出現在事件追蹤、名單或分享文字；只保留推導後的生命靈數。")
 
-        st.markdown("#### 📊 五向行動風格")
+        st.markdown("#### 📊 四種動物傾向")
         render_radar_chart_birthday(report["scores"])
         score_items = "".join(
             (
                 '<div class="score-item">'
-                f'<div class="score-label">{html_escape(DIMENSION_PROFILES[key]["label"])}</div>'
-                f'<div class="score-value">{int(report["scores"][key])}%</div>'
+                f'<div class="score-label">{html_escape(label)}</div>'
+                f'<div class="score-value">{int(report["scores"][label])} 題</div>'
                 "</div>"
             )
-            for key in DIMENSION_ORDER
+            for label in ("老虎", "海豚", "企鵝", "蜜蜂")
         )
         st.markdown(
             f'<div class="score-grid">{score_items}</div>',
@@ -2892,6 +2949,9 @@ def page_result():
         st.markdown("### 👀 容易忽略的地方")
         st.write(report["blind_spot"])
 
+        st.markdown("### 🤝 別人怎麼和你合作更順")
+        st.write(report["collaboration"])
+
         st.markdown(
             f"""
             <div class="glass-card">
@@ -2903,8 +2963,8 @@ def page_result():
             unsafe_allow_html=True,
         )
         st.caption(
-            "說明：生日核心是自我探索的趣味提示；行動風格來自 10 題行為題，"
-            "用來協助反思，不是心理或醫療診斷。"
+            "說明：生命靈數與動物原型是自我探索、團隊溝通的趣味工具；"
+            "不是經科學驗證的心理測驗，也不是心理或醫療診斷。"
         )
 
         st.markdown("---")
@@ -2928,7 +2988,7 @@ def page_result():
         )
 
         st.markdown("---")
-        st.markdown("## 🧾 我的行動原型｜可直接貼 LINE")
+        st.markdown("## 🧾 我的生命原型｜可直接貼 LINE")
         share_text = build_line_share_text_birthday(
             client_name=st.session_state.u_name,
             interest=interest or "先保留結果",
@@ -2937,7 +2997,7 @@ def page_result():
             report=report,
         )
         st.code(share_text, language=None)
-        render_copy_box(share_text, "複製我的行動原型", "birthday_summary")
+        render_copy_box(share_text, "複製我的生命原型", "birthday_summary")
         render_result_share_pack(
             str(report["combined_title"]),
             str(report["summary"]),
