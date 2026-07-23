@@ -1,8 +1,15 @@
 # ignore secrets (DO NOT COMMIT)
 .streamlit/service_account.json
 .streamlit/secrets.toml
+.env
+.env.*
 
 # mac
 .DS_Store
+.venv/
+venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+.mypy_cache/
+*.bak

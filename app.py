@@ -2,34 +2,43 @@
 # -*- coding: utf-8 -*-
 """
 2026 AI 風格診斷系統（Streamlit）
-整合版 v1.5.3（在 v1.5.2 基礎上，將健康雷達圖「固定 4 軸」做成更穩健版本 + 環境偵測）
+成長漏斗版 v2.0
 
-✅ v1.5.3 變更（本檔已整合）：
-1) 健康雷達圖固定 4 軸（睡覺/心情/消化/體質）
-   - 計分端：section 先 strip + 強制映射回 4 軸
-   - 畫圖端：鎖定 angular axis 類別順序（避免只顯示 2 軸）
-2) sidebar 環境偵測（metadata）：python/streamlit/pandas/plotly/st-gsheets-connection/gspread…等
-3) 其餘維持 v1.5.2 原設計（partners/gsheets/LINE推播/Top3訊號/專業分流等）
+✅ v2.0 變更：
+1) 事件漏斗：開啟、開始、題目進度、完成、結果、名單與分享包
+2) 三種入口：friend / cold / social，可搭配 src / campaign / quiz
+3) 完整結果不再被必填興趣阻擋
+4) 夥伴分享包：LINE / Instagram / Facebook / 跟進文字
 """
 
-import ssl
 import json
+import os
 import re
 import time
 import random
 import hashlib
 import sys
 import platform
-from pathlib import Path
+import uuid
 from collections import Counter
 from datetime import datetime, timezone, timedelta
+from html import escape as html_escape
 from typing import Optional, Tuple, Dict, Any, List
 
 import requests
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
-from streamlit_gsheets import GSheetsConnection
+
+from growth_features import (
+    AcquisitionContext,
+    EVENT_COLUMNS,
+    build_campaign_share_pack,
+    build_event_row,
+    build_partner_share_pack,
+    build_share_url,
+    entry_copy,
+)
 
 # plotly（雷達圖）可選
 try:
@@ -46,22 +55,14 @@ except Exception:
 
 
 # =========================
-# 0) SSL 修正（Mac 常見）
-# =========================
-try:
-    ssl._create_default_https_context = ssl._create_unverified_context
-except Exception:
-    pass
-
-
-# =========================
 # 1) Page Config
 # =========================
 st.set_page_config(page_title="2026 AI 風格診斷", page_icon="🤖", layout="centered")
 
-APP_VERSION = "multiuser-friendly-012-v1.5.3"
+APP_VERSION = "growth-funnel-v2.0.2"
 WEALTH_QUIZ_VERSION = "2026Q1-10Q-v1.2"
 HEALTH_QUIZ_VERSION = "2026H1-10Q-v1.1"
+DEFAULT_APP_URL = "https://richaiproject-xzwznzb6fdd35n8otuxgha.streamlit.app/"
 
 
 # =========================
@@ -94,13 +95,43 @@ def sget(dct: dict, *path, default=None):
     return cur
 
 
+def secret_value(*path, default=None):
+    """Read Streamlit secrets without failing when no local secrets file exists."""
+    try:
+        return sget(st.secrets, *path, default=default)
+    except Exception:
+        return default
+
+
 def norm_ref(x: str) -> str:
     return str(x or "").strip().lower()
 
 
+ACQUISITION = AcquisitionContext.from_values(
+    ref_input=get_qp("ref", "master"),
+    source=get_qp("src", "direct"),
+    campaign=get_qp("campaign", "organic"),
+    entry=get_qp("entry", "friend"),
+    forced_quiz=get_qp("quiz", ""),
+)
 DEBUG = str(get_qp("debug", "0")).lower() in ("1", "true", "yes", "y")
+DEMO_MODE = str(os.getenv("RICH_DEMO_MODE", "0")).strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "y",
+)
 FUNNEL_TAG = str(get_qp("cl", "cl3")).strip()
 MODE = str(get_qp("mode", "A")).strip()
+APP_PUBLIC_URL = str(
+    secret_value("APP_PUBLIC_URL", default=DEFAULT_APP_URL) or DEFAULT_APP_URL
+).strip()
+EVENT_TRACKING_ENABLED = (not DEMO_MODE) and str(
+    secret_value("ENABLE_EVENT_TRACKING", default="false")
+).strip().lower() in ("1", "true", "yes", "y")
+ADMIN_PANEL_ENABLED = str(
+    secret_value("ENABLE_LEGACY_ADMIN_PANEL", default="false")
+).strip().lower() in ("1", "true", "yes", "y")
 
 
 def _pkg_ver(pkg_name: str) -> str:
@@ -134,6 +165,11 @@ def _env_meta() -> Dict[str, Any]:
 if DEBUG:
     st.sidebar.caption(f"APP_VERSION: {APP_VERSION}")
     st.sidebar.caption(f"FUNNEL_TAG: {FUNNEL_TAG} | MODE: {MODE}")
+    st.sidebar.caption(
+        f"ENTRY: {ACQUISITION.entry} | SRC: {ACQUISITION.source} | CAMPAIGN: {ACQUISITION.campaign}"
+    )
+    st.sidebar.caption(f"DEMO MODE: {'ON' if DEMO_MODE else 'OFF'}")
+    st.sidebar.caption(f"EVENT TRACKING: {'ON' if EVENT_TRACKING_ENABLED else 'OFF'}")
     st.sidebar.subheader("🧪 環境偵測（讀 metadata）")
     st.sidebar.json(_env_meta())
 
@@ -161,12 +197,16 @@ def _retry(fn, *, attempts=4, base_sleep=0.5, max_sleep=3.0, name="op"):
 # =========================
 DEFAULT_SHEET_URL = "https://docs.google.com/spreadsheets/d/1GxpOmk108RM8wd9lvrQSpngTm5_KWpKkF31bbXjZKv8/edit"
 SPREADSHEET_URL = (
-    sget(st.secrets, "connections", "gsheets", "spreadsheet", default=DEFAULT_SHEET_URL)
+    secret_value("connections", "gsheets", "spreadsheet", default=DEFAULT_SHEET_URL)
     or DEFAULT_SHEET_URL
 )
 
 
 def get_conn():
+    # Keep the Google Sheets connector lazy so local Demo/QA mode needs no
+    # credentials and does not load its native DuckDB dependency.
+    from streamlit_gsheets import GSheetsConnection
+
     return st.connection("gsheets", type=GSheetsConnection)
 
 
@@ -327,25 +367,42 @@ def pick_partner(df_all: pd.DataFrame, ref: str) -> dict:
     return df_all.iloc[0].to_dict()
 
 
-try:
-    df_all = load_all_partners_cached(SPREADSHEET_URL, DEBUG)
-except Exception as e:
-    st.error("❌ Google Sheets（partners）讀取失敗")
-    st.exception(e)
-    st.stop()
+if DEMO_MODE:
+    df_all = pd.DataFrame(
+        [
+            {
+                "ref": "master",
+                "name": "侯閔議",
+                "title": "RICH AI 風格診斷顧問",
+                "img_url": "",
+                "line_id": "",
+                "line_search_id": "@rich-demo",
+                "line_token": "",
+                "password": "",
+            }
+        ]
+    )
+else:
+    try:
+        df_all = load_all_partners_cached(SPREADSHEET_URL, DEBUG)
+    except Exception as e:
+        st.error("❌ Google Sheets（partners）讀取失敗")
+        st.exception(e)
+        st.stop()
 
 ref_input = norm_ref(get_qp("ref", "master"))
 partner = pick_partner(df_all, ref_input)
+ENTRY_UI = entry_copy(ACQUISITION, str(partner.get("name", "")).strip())
 
 p_img = drive_img(partner.get("img_url", ""), width=800)
 BADGE_FILE_ID = "1Dz9q_hoxG4BN9YOHymw7JjqJaq5kEFGf"
-BADGE_URL = drive_img(BADGE_FILE_ID, width=200)
+BADGE_URL = "" if DEMO_MODE else drive_img(BADGE_FILE_ID, width=200)
 
 
 # =========================
 # 5) CSS（玻璃卡 + 多巴胺卡 + 黏著 CTA）
 # =========================
-CSS_VERSION = "2026-02-15-integrated-v1.5.3"
+CSS_VERSION = "2026-07-23-growth-v2.0.2"
 
 st.markdown(
     f"""
@@ -360,6 +417,9 @@ st.markdown(
 html{{ font-size:18px !important; }}
 body, .stApp{{ font-size:1rem !important; }}
 *{{ font-family:var(--font) !important; }}
+[data-testid="stIconMaterial"]{{
+  font-family:"Material Symbols Rounded","Material Icons" !important;
+}}
 
 .stApp{{
   background:
@@ -572,6 +632,31 @@ div[data-baseweb="popover"] ul{{
 }}
 div[data-baseweb="popover"] [role="option"],
 div[data-baseweb="popover"] li{{ color:#fff !important; background:transparent !important; }}
+
+@media (max-width:640px){{
+  [data-testid="stMainBlockContainer"]{{
+    padding:4rem 1rem 8rem !important;
+  }}
+  .hero-title{{
+    font-size:1.72rem !important;
+    line-height:1.24 !important;
+  }}
+  .hero-subtitle{{
+    font-size:0.96rem !important;
+    line-height:1.5 !important;
+  }}
+  .partner-card{{
+    padding:10px 12px !important;
+    margin:4px 0 8px 0 !important;
+  }}
+  .glass-card{{
+    padding:13px 14px !important;
+    margin:6px 0 8px 0 !important;
+  }}
+  .glass-hint{{ display:none !important; }}
+  hr{{ margin:0.9rem 0 !important; }}
+  h3{{ font-size:1.3rem !important; }}
+}}
 </style>
 """,
     unsafe_allow_html=True,
@@ -593,13 +678,18 @@ img_html = (
     else ""
 )
 ref_html = f'<div class="sb-ref">ref：{sb_ref}</div>' if DEBUG and sb_ref else ""
+sb_badge_html = (
+    f'<img class="card-badge" src="{BADGE_URL}" alt="badge" onerror="this.style.display=\'none\';" />'
+    if BADGE_URL
+    else ""
+)
 
 st.sidebar.markdown(
     f"""
 <div class="sb-card">
-  <img class="card-badge" src="{BADGE_URL}" alt="badge" onerror="this.style.display='none';" />
+  {sb_badge_html}
   {img_html}
-  <div class="sb-kicker">你的專屬顧問</div>
+  <div class="sb-kicker">{ENTRY_UI["partner_kicker"]}</div>
   <div class="sb-name gold-gradient">{sb_name}</div>
   <div class="sb-title">🎖️ {sb_title}</div>
   {ref_html}
@@ -628,7 +718,7 @@ def show_partner_card():
           <img class="partner-img" src="{p_img}" alt="partner" loading="lazy"
                onerror="this.style.display='none';" />
           <div class="partner-meta">
-            <div class="partner-kicker">你的專屬顧問</div>
+            <div class="partner-kicker">{ENTRY_UI["partner_kicker"]}</div>
             <div class="partner-name gold-gradient">{name}</div>
             <div class="partner-title">🎖️ {title}</div>
             {ref_html2}
@@ -640,7 +730,7 @@ def show_partner_card():
         <div class="partner-card">
           {badge_html}
           <div class="partner-meta">
-            <div class="partner-kicker">你的專屬顧問</div>
+            <div class="partner-kicker">{ENTRY_UI["partner_kicker"]}</div>
             <div class="partner-name gold-gradient">{name}</div>
             <div class="partner-title">🎖️ {title}</div>
             {ref_html2}
@@ -656,7 +746,7 @@ def show_partner_card():
 if "page" not in st.session_state:
     st.session_state.page = "intro"  # intro / quiz / result
 if "quiz_id" not in st.session_state:
-    st.session_state.quiz_id = "wealth"  # wealth / health
+    st.session_state.quiz_id = ACQUISITION.forced_quiz or "wealth"  # wealth / health
 if "step" not in st.session_state:
     st.session_state.step = 1
 if "u_name" not in st.session_state:
@@ -675,6 +765,57 @@ if "notified" not in st.session_state:
     st.session_state.notified = False
 if "notified_lead_id" not in st.session_state:
     st.session_state.notified_lead_id = ""
+if "session_id" not in st.session_state:
+    st.session_state.session_id = uuid.uuid4().hex[:20]
+if "tracked_events" not in st.session_state:
+    st.session_state.tracked_events = set()
+
+
+def track_event(
+    event: str,
+    *,
+    quiz_id: str = "",
+    step: Any = "",
+    lead_id: str = "",
+    meta: Optional[Dict[str, Any]] = None,
+    once_key: str = "",
+) -> bool:
+    """Append one privacy-light funnel event when event tracking is enabled."""
+    if not EVENT_TRACKING_ENABLED:
+        return False
+
+    event_key = once_key or f"{event}|{quiz_id}|{step}|{lead_id}"
+    if event_key in st.session_state.tracked_events:
+        return True
+    st.session_state.tracked_events.add(event_key)
+
+    tz = timezone(timedelta(hours=8))
+    row = build_event_row(
+        now_text=datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S"),
+        session_id=st.session_state.session_id,
+        event=event,
+        context=ACQUISITION,
+        ref_resolved=str(partner.get("ref", "")).strip(),
+        partner_name=str(partner.get("name", "")).strip(),
+        quiz_id=quiz_id,
+        step=step,
+        lead_id=lead_id,
+        meta=meta,
+    )
+    try:
+        return gs_append_row_best_effort(get_conn(), "events", row, EVENT_COLUMNS)
+    except Exception as exc:
+        if DEBUG:
+            st.sidebar.warning(f"事件追蹤暫停：{type(exc).__name__}")
+        return False
+
+
+track_event(
+    "page_opened",
+    quiz_id=ACQUISITION.forced_quiz,
+    meta={"ref_fallback": ref_input != str(partner.get("ref", "")).strip()},
+    once_key="page_opened",
+)
 
 
 def reset_all(keep_profile: bool = True):
@@ -685,6 +826,9 @@ def reset_all(keep_profile: bool = True):
     st.session_state.notified_lead_id = ""
     st.session_state.u_interest = ""
     st.session_state.u_interest_other = ""
+    st.session_state.tracked_events = {
+        key for key in st.session_state.tracked_events if key == "page_opened"
+    }
     if not keep_profile:
         st.session_state.u_name = ""
         st.session_state.u_state = ""
@@ -743,7 +887,7 @@ STATE_OPTIONS = [
     "我想拿回時間",
     "其他（可填）",
 ]
-STATE_PLACEHOLDER = "請選擇（必填）"
+STATE_PLACEHOLDER = "先跳過，直接測驗"
 
 STATE_SOOTHE_LINE = {
     "更靠近夢想": "你不是想逃離現況，你只是想把人生拉回更靠近夢想的位置。",
@@ -812,7 +956,7 @@ WEALTH_INTEREST_OPTIONS = [
     "團隊經營/複製系統",
     "其他（可填）",
 ]
-INTEREST_PLACEHOLDER = "請選擇（必填）"
+INTEREST_PLACEHOLDER = "先不選，直接看結果"
 
 OUTRO_BY_INTEREST = {
     "AI 工具/自動化課": "關於你感興趣的 AI 自動化，單靠文字很難感受它的震撼。{p_name} 剛好有參與我們內部的「AI 實戰拆解會」，那裡會現場展示如何讓 AI 代替人力。既然他在旁邊，請他幫你預約下一次的線上/實體觀摩名額，你會更快看懂未來的路。",
@@ -1226,6 +1370,8 @@ def build_health_answers_payload(answers_map: dict, meta: Optional[Dict] = None,
 # 12) LINE Push（推播）
 # =========================
 def push_line(token: str, to_id: str, text: str):
+    if DEMO_MODE:
+        return
     if not token or not to_id:
         return
     try:
@@ -1304,7 +1450,6 @@ def build_push_message_health(*, lead_id: str, report: Dict[str, Any], interest:
 def write_lead_and_notify_wealth(primary: str, secondary: str, persona_name: str, counts: Counter, interest: str) -> str:
     tz = timezone(timedelta(hours=8))
     now_tw = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
-    conn = get_conn()
 
     ref_in = norm_ref(get_qp("ref", "master"))
     ref_resolved = str(partner.get("ref", "")).strip()
@@ -1321,6 +1466,9 @@ def write_lead_and_notify_wealth(primary: str, secondary: str, persona_name: str
         FUNNEL_TAG,
         MODE,
     )
+    if DEMO_MODE:
+        return f"demo-{lead_id}"
+    conn = get_conn()
 
     meta = {
         "lead_id": lead_id,
@@ -1331,6 +1479,10 @@ def write_lead_and_notify_wealth(primary: str, secondary: str, persona_name: str
         "funnel": FUNNEL_TAG,
         "mode": MODE,
         "app_version": APP_VERSION,
+        "session_id": st.session_state.session_id,
+        "source": ACQUISITION.source,
+        "campaign": ACQUISITION.campaign,
+        "entry": ACQUISITION.entry,
     }
 
     answers_payload = build_wealth_answers_payload(st.session_state.answers_map, meta=meta)
@@ -1353,9 +1505,9 @@ def write_lead_and_notify_wealth(primary: str, secondary: str, persona_name: str
 
     gs_append_row_best_effort(conn, "leads", row, LEADS_COLS)
 
-    line_cfg = sget(st.secrets, "line", default={}) or {}
-    master_token = str(line_cfg.get("channel_access_token") or st.secrets.get("LINE_CHANNEL_ACCESS_TOKEN", "")).strip()
-    master_to_id = str(line_cfg.get("user_id") or st.secrets.get("LINE_USER_ID", "")).strip()
+    line_cfg = secret_value("line", default={}) or {}
+    master_token = str(line_cfg.get("channel_access_token") or secret_value("LINE_CHANNEL_ACCESS_TOKEN", default="")).strip()
+    master_to_id = str(line_cfg.get("user_id") or secret_value("LINE_USER_ID", default="")).strip()
     partner_token = str(partner.get("line_token") or "").strip()
     partner_to_id = str(partner.get("line_id") or "").strip()
 
@@ -1375,7 +1527,6 @@ def write_lead_and_notify_wealth(primary: str, secondary: str, persona_name: str
 def write_lead_and_notify_health(report: Dict[str, Any], interest: str) -> str:
     tz = timezone(timedelta(hours=8))
     now_tw = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
-    conn = get_conn()
 
     ref_in = norm_ref(get_qp("ref", "master"))
     ref_resolved = str(partner.get("ref", "")).strip()
@@ -1392,6 +1543,9 @@ def write_lead_and_notify_health(report: Dict[str, Any], interest: str) -> str:
         FUNNEL_TAG,
         MODE,
     )
+    if DEMO_MODE:
+        return f"demo-{lead_id}"
+    conn = get_conn()
 
     meta = {
         "lead_id": lead_id,
@@ -1402,6 +1556,10 @@ def write_lead_and_notify_health(report: Dict[str, Any], interest: str) -> str:
         "funnel": FUNNEL_TAG,
         "mode": MODE,
         "app_version": APP_VERSION,
+        "session_id": st.session_state.session_id,
+        "source": ACQUISITION.source,
+        "campaign": ACQUISITION.campaign,
+        "entry": ACQUISITION.entry,
     }
 
     answers_payload = build_health_answers_payload(st.session_state.answers_map, meta=meta, report=report)
@@ -1424,9 +1582,9 @@ def write_lead_and_notify_health(report: Dict[str, Any], interest: str) -> str:
 
     gs_append_row_best_effort(conn, "leads", row, LEADS_COLS)
 
-    line_cfg = sget(st.secrets, "line", default={}) or {}
-    master_token = str(line_cfg.get("channel_access_token") or st.secrets.get("LINE_CHANNEL_ACCESS_TOKEN", "")).strip()
-    master_to_id = str(line_cfg.get("user_id") or st.secrets.get("LINE_USER_ID", "")).strip()
+    line_cfg = secret_value("line", default={}) or {}
+    master_token = str(line_cfg.get("channel_access_token") or secret_value("LINE_CHANNEL_ACCESS_TOKEN", default="")).strip()
+    master_to_id = str(line_cfg.get("user_id") or secret_value("LINE_USER_ID", default="")).strip()
     partner_token = str(partner.get("line_token") or "").strip()
     partner_to_id = str(partner.get("line_id") or "").strip()
 
@@ -1584,9 +1742,13 @@ def build_line_share_text_health(
 # 15) UI：Header / Progress / Sticky CTA / Radar
 # =========================
 def render_header():
-    st.markdown('<div class="hero-title">© 2026 AI 風格診斷</div>', unsafe_allow_html=True)
+    st.caption(ENTRY_UI["eyebrow"])
     st.markdown(
-        '<div class="hero-subtitle">免費測驗：財富風格 / 健康對帳（做完直接拿「解析 + 下一步」+ 可直接貼 LINE 的完整文案）</div>',
+        f'<div class="hero-title">{html_escape(ENTRY_UI["title"])}</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f'<div class="hero-subtitle">{html_escape(ENTRY_UI["subtitle"])}</div>',
         unsafe_allow_html=True,
     )
 
@@ -1600,9 +1762,16 @@ def progress_value(total: int):
 
 
 def render_sticky_cta(label="➕ 加顧問 LINE 領取完整報告"):
-    line_sid = str(partner.get("line_search_id", "")).strip() or str(st.secrets.get("MASTER_LINE_ADD", "")).strip()
+    line_sid = str(partner.get("line_search_id", "")).strip() or str(
+        secret_value("MASTER_LINE_ADD", default="")
+    ).strip()
     if not line_sid:
         return
+    track_event(
+        "line_cta_shown",
+        quiz_id=st.session_state.quiz_id,
+        once_key=f"line_cta_shown|{st.session_state.quiz_id}",
+    )
     if line_sid.startswith("@"):
         line_url = f"https://line.me/R/ti/p/{line_sid}"
     else:
@@ -1616,6 +1785,88 @@ def render_sticky_cta(label="➕ 加顧問 LINE 領取完整報告"):
         """,
         unsafe_allow_html=True,
     )
+
+
+def render_copy_box(text: str, button_label: str, key: str):
+    text_js = json.dumps(str(text or ""), ensure_ascii=False)
+    safe_key = re.sub(r"[^a-zA-Z0-9_-]", "_", key)
+    components.html(
+        f"""
+        <div style="font-family:-apple-system,BlinkMacSystemFont,'Microsoft JhengHei',sans-serif;">
+          <button id="copy_{safe_key}" style="
+            width:100%; padding:10px 12px; border-radius:12px;
+            border:1px solid rgba(255,215,0,0.30);
+            background:#FFD166; color:#151515; font-weight:900; cursor:pointer;
+          ">{html_escape(button_label)}</button>
+          <div id="msg_{safe_key}" style="margin-top:6px;color:#B8B8C6;font-size:13px;"></div>
+        </div>
+        <script>
+          const btn = document.getElementById("copy_{safe_key}");
+          const msg = document.getElementById("msg_{safe_key}");
+          btn.addEventListener("click", async () => {{
+            try {{
+              await navigator.clipboard.writeText({text_js});
+              msg.textContent = "✅ 已複製";
+            }} catch (e) {{
+              msg.textContent = "⚠️ 無法自動複製，請長按上方文字";
+            }}
+          }});
+        </script>
+        """,
+        height=70,
+    )
+
+
+def render_campaign_share_pack():
+    quiz_id = ACQUISITION.forced_quiz or st.session_state.quiz_id
+    quiz_label = "財富與行動風格" if quiz_id == "wealth" else "健康節奏對帳"
+    share_url = build_share_url(APP_PUBLIC_URL, ACQUISITION, quiz_id)
+    pack = build_campaign_share_pack(
+        partner_name=str(partner.get("name", "")).strip(),
+        quiz_label=quiz_label,
+        share_url=share_url,
+    )
+    with st.expander("📣 夥伴分享包｜LINE・IG・FB"):
+        st.caption("文字已帶入你的 ref、來源與活動參數；可直接複製後發布。")
+        tabs = st.tabs(["LINE", "Instagram", "Facebook"])
+        for tab, platform, label in zip(
+            tabs,
+            ("line", "instagram", "facebook"),
+            ("複製 LINE 分享文字", "複製 IG 貼文文字", "複製 FB 貼文文字"),
+        ):
+            with tab:
+                st.code(pack[platform], language=None)
+                render_copy_box(pack[platform], label, f"campaign_{platform}")
+
+
+def render_result_share_pack(result_title: str, result_summary: str):
+    quiz_id = st.session_state.quiz_id
+    quiz_label = "財富與行動風格" if quiz_id == "wealth" else "健康節奏對帳"
+    share_url = build_share_url(APP_PUBLIC_URL, ACQUISITION, quiz_id)
+    pack = build_partner_share_pack(
+        partner_name=str(partner.get("name", "")).strip(),
+        client_name=st.session_state.u_name,
+        quiz_label=quiz_label,
+        result_title=result_title,
+        result_summary=result_summary,
+        share_url=share_url,
+    )
+    track_event(
+        "share_pack_viewed",
+        quiz_id=quiz_id,
+        once_key=f"share_pack_viewed|{quiz_id}",
+    )
+    st.markdown("## 📣 分享我的結果")
+    st.caption("可以分享結果，也可以讓夥伴使用跟進文字繼續對話。")
+    tabs = st.tabs(["LINE", "Instagram", "Facebook", "夥伴跟進"])
+    for tab, platform, label in zip(
+        tabs,
+        ("line", "instagram", "facebook", "follow_up"),
+        ("複製 LINE 文字", "複製 IG 文字", "複製 FB 文字", "複製跟進文字"),
+    ):
+        with tab:
+            st.code(pack[platform], language=None)
+            render_copy_box(pack[platform], label, f"result_{platform}")
 
 
 def render_radar_chart_wealth(answers_map: Dict[int, str]):
@@ -1698,79 +1949,106 @@ def render_radar_chart_health(sec_scores: Dict[str, int]):
 # 16) Pages
 # =========================
 def page_intro():
-    show_partner_card()
-    render_sticky_cta(label="➕ 加顧問 LINE（還沒測驗）")
     render_header()
+    show_partner_card()
     st.progress(0.0)
+    track_event("intro_viewed", quiz_id=st.session_state.quiz_id, once_key="intro_viewed")
 
     st.markdown("---")
-    st.markdown("### 🧪 請選擇測驗主題")
+    st.markdown("### 🧪 選擇你現在最想了解的方向")
+    if ACQUISITION.forced_quiz:
+        st.session_state.quiz_id = ACQUISITION.forced_quiz
     cur_id = st.session_state.quiz_id
 
-    c1, c2 = st.columns(2)
-    with c1:
-        active_cls = "active" if cur_id == "wealth" else ""
+    if ACQUISITION.forced_quiz:
+        icon = "🚀" if cur_id == "wealth" else "🌿"
+        title = "財富與行動風格" if cur_id == "wealth" else "健康節奏對帳"
+        desc = (
+            "看見你的行動優勢、卡點與適合的下一步。"
+            if cur_id == "wealth"
+            else "整理睡眠、心情、消化與體力訊號。"
+        )
         st.markdown(
             f"""
-            <div class="dopamine-card card-wealth {active_cls}">
-              <div class="dopa-icon">🚀</div>
-              <div class="dopa-title">財富風格</div>
-              <div class="dopa-badge">價值 $1200</div>
-              <div class="dopa-desc">10 題測出你的致富天賦與行動策略。</div>
+            <div class="glass-card">
+              <div class="glass-title">{icon} {title}</div>
+              <div class="glass-body">{desc}</div>
+              <div class="glass-hint">已依分享連結直接帶你進入這個主題。</div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        if st.button("選這個（財富）", key="pick_wealth"):
-            st.session_state.quiz_id = "wealth"
-            st.rerun()
-
-    with c2:
-        active_cls = "active" if cur_id == "health" else ""
-        st.markdown(
-            f"""
-            <div class="dopamine-card card-health {active_cls}">
-              <div class="dopa-icon">🌿</div>
-              <div class="dopa-title">健康對帳</div>
-              <div class="dopa-badge">健康無價</div>
-              <div class="dopa-desc">3 分鐘檢測隱形利息，找回身體能量。</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        if st.button("選這個（健康）", key="pick_health"):
-            st.session_state.quiz_id = "health"
-            st.rerun()
-
-    st.markdown("---")
-    name = st.text_input("如何稱呼你？", placeholder="輸入暱稱/名字", value=st.session_state.u_name)
-
-    # 財富測驗才需要「狀態」
-    if st.session_state.quiz_id == "wealth":
-        st.markdown("### 你目前最在意的是哪一塊？")
-        state_selection = st.selectbox("請選擇（必填）", [STATE_PLACEHOLDER] + STATE_OPTIONS, index=0)
-
-        state_other = ""
-        if state_selection == "其他（可填）":
-            state_other = st.text_input("其他（請填寫）", value=st.session_state.u_state_other, key="state_other_input")
-            st.session_state.u_state_other = state_other
-
-        state_final = normalize_state(state_selection, state_other)
     else:
-        state_final = st.session_state.u_state or ""
+        c1, c2 = st.columns(2)
+        with c1:
+            active_cls = "active" if cur_id == "wealth" else ""
+            st.markdown(
+                f"""
+                <div class="dopamine-card card-wealth {active_cls}">
+                  <div class="dopa-icon">🚀</div>
+                  <div class="dopa-title">財富與行動風格</div>
+                  <div class="dopa-badge">完整結果直接看</div>
+                  <div class="dopa-desc">看見你的行動優勢、卡點與適合的下一步。</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            if st.button("選擇財富與行動", key="pick_wealth"):
+                st.session_state.quiz_id = "wealth"
+                track_event("quiz_selected", quiz_id="wealth", once_key="quiz_selected|wealth")
+                st.rerun()
 
-    if st.button("開始測驗 🚀", key="start_btn"):
-        if not name or not name.strip():
-            st.warning("請先輸入稱呼。")
-            st.stop()
-        if st.session_state.quiz_id == "wealth" and not state_final:
-            st.warning("請先選擇你目前最在意的狀態（必填）。")
-            st.stop()
+        with c2:
+            active_cls = "active" if cur_id == "health" else ""
+            st.markdown(
+                f"""
+                <div class="dopamine-card card-health {active_cls}">
+                  <div class="dopa-icon">🌿</div>
+                  <div class="dopa-title">健康節奏對帳</div>
+                  <div class="dopa-badge">完整結果直接看</div>
+                  <div class="dopa-desc">整理睡眠、心情、消化與體力訊號。</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            if st.button("選擇健康節奏", key="pick_health"):
+                st.session_state.quiz_id = "health"
+                track_event("quiz_selected", quiz_id="health", once_key="quiz_selected|health")
+                st.rerun()
 
-        with st.spinner("🔄 AI 正在初始化測驗模組..."):
-            time.sleep(1.1)
+    with st.expander("選填：讓結果更貼近你", expanded=False):
+        name = st.text_input(
+            "如何稱呼你？（選填）",
+            placeholder="可以只填暱稱，也可以先不填",
+            value="" if st.session_state.u_name == "匿名訪客" else st.session_state.u_name,
+            key="u_name_input_v2",
+        )
 
-        st.session_state.u_name = name.strip()
+        if st.session_state.quiz_id == "wealth":
+            st.markdown("### 你目前最在意的是哪一塊？（選填）")
+            state_selection = st.selectbox(
+                "可以先跳過",
+                [STATE_PLACEHOLDER] + STATE_OPTIONS,
+                index=0,
+                key="u_state_select_v2",
+            )
+
+            state_other = ""
+            if state_selection == "其他（可填）":
+                state_other = st.text_input(
+                    "其他（請填寫）",
+                    value=st.session_state.u_state_other,
+                    key="state_other_input",
+                )
+                st.session_state.u_state_other = state_other
+
+            state_final = normalize_state(state_selection, state_other)
+        else:
+            state_final = st.session_state.u_state or ""
+
+    st.caption("免註冊，完整結果直接看；只有主動同意才會建立後續名單。")
+    if st.button(ENTRY_UI["start_label"], key="start_btn"):
+        st.session_state.u_name = name.strip() or "匿名訪客"
         if st.session_state.quiz_id == "wealth":
             st.session_state.u_state = state_final
 
@@ -1781,18 +2059,31 @@ def page_intro():
         st.session_state.notified_lead_id = ""
         st.session_state.u_interest = ""
         st.session_state.u_interest_other = ""
+        track_event(
+            "quiz_started",
+            quiz_id=st.session_state.quiz_id,
+            once_key=f"quiz_started|{st.session_state.quiz_id}",
+        )
         st.rerun()
+
+    st.markdown("---")
+    render_campaign_share_pack()
 
 
 def page_quiz():
     show_partner_card()
-    render_sticky_cta(label="加顧問 LINE（中途疑問）")
 
     is_wealth = (st.session_state.quiz_id == "wealth")
     total = WEALTH_TOTAL if is_wealth else HEALTH_TOTAL
     st.progress(progress_value(total))
 
     step = int(st.session_state.step)
+    track_event(
+        "quiz_step_viewed",
+        quiz_id=st.session_state.quiz_id,
+        step=step,
+        once_key=f"quiz_step_viewed|{st.session_state.quiz_id}|{step}",
+    )
     st.markdown(f'<div class="quiz-step">第 {step} 題 / 共 {total} 題</div>', unsafe_allow_html=True)
 
     if is_wealth:
@@ -1804,14 +2095,20 @@ def page_quiz():
         tag_to_label = {o[1]: o[0] for o in opts}
 
         saved_tag = st.session_state.answers_map.get(step)
-        default_label = tag_to_label.get(saved_tag, labels[0])
-        default_index = labels.index(default_label) if default_label in labels else 0
-        choice = st.radio("請選擇一個最像你的選項", labels, index=default_index, key=f"q_{step}")
+        default_label = tag_to_label.get(saved_tag, "")
+        default_index = labels.index(default_label) if default_label in labels else None
+        choice = st.radio(
+            "請選擇一個最像你的選項",
+            labels,
+            index=default_index,
+            key=f"q_{step}",
+        )
 
         c1, c2 = st.columns(2)
         with c1:
             if st.button("⬅️ 上一題", key=f"prev_{step}"):
-                st.session_state.answers_map[step] = label_to_tag[choice]
+                if choice:
+                    st.session_state.answers_map[step] = label_to_tag[choice]
                 if step > 1:
                     st.session_state.step = step - 1
                 else:
@@ -1821,15 +2118,20 @@ def page_quiz():
         with c2:
             btn_txt = "下一題 ➡️" if step < total else "查看結果 ✅"
             if st.button(btn_txt, key=f"next_{step}"):
+                if not choice:
+                    st.warning("請先選擇一個最像你的答案。")
+                    st.stop()
                 st.session_state.answers_map[step] = label_to_tag[choice]
                 if step < total:
                     st.session_state.step = step + 1
                     st.rerun()
                 else:
-                    with st.spinner(f"正在分析 {st.session_state.u_name} 的潛意識選擇..."):
-                        time.sleep(0.5)
-                    with st.spinner(f"正在對比 2026 {st.session_state.quiz_id} 趨勢資料庫..."):
-                        time.sleep(0.5)
+                    track_event(
+                        "quiz_completed",
+                        quiz_id=st.session_state.quiz_id,
+                        step=total,
+                        once_key=f"quiz_completed|{st.session_state.quiz_id}",
+                    )
                     st.session_state.page = "result"
                     st.rerun()
 
@@ -1841,14 +2143,15 @@ def page_quiz():
         labels = [o[0] for o in q["options"]]
         vals = [int(o[1]) for o in q["options"]]
 
-        saved_val = st.session_state.answers_map.get(step, 0)
-        default_idx = vals.index(int(saved_val)) if int(saved_val) in vals else 0
+        saved_val = st.session_state.answers_map.get(step)
+        default_idx = vals.index(int(saved_val)) if saved_val is not None and int(saved_val) in vals else None
         choice_label = st.radio("請選擇：", labels, index=default_idx, key=f"h_{step}")
 
         c1, c2 = st.columns(2)
         with c1:
             if st.button("⬅️ 上一題", key=f"h_prev_{step}"):
-                st.session_state.answers_map[step] = vals[labels.index(choice_label)]
+                if choice_label:
+                    st.session_state.answers_map[step] = vals[labels.index(choice_label)]
                 if step > 1:
                     st.session_state.step = step - 1
                 else:
@@ -1858,105 +2161,143 @@ def page_quiz():
         with c2:
             btn_txt = "下一題 ➡️" if step < total else "查看結果 ✅"
             if st.button(btn_txt, key=f"h_next_{step}"):
+                if not choice_label:
+                    st.warning("請先選擇一個最接近目前狀況的答案。")
+                    st.stop()
                 st.session_state.answers_map[step] = vals[labels.index(choice_label)]
                 if step < total:
                     st.session_state.step = step + 1
                     st.rerun()
                 else:
-                    with st.spinner(f"正在分析 {st.session_state.u_name} 的潛意識選擇..."):
-                        time.sleep(0.5)
-                    with st.spinner(f"正在對比 2026 {st.session_state.quiz_id} 趨勢資料庫..."):
-                        time.sleep(0.5)
+                    track_event(
+                        "quiz_completed",
+                        quiz_id=st.session_state.quiz_id,
+                        step=total,
+                        once_key=f"quiz_completed|{st.session_state.quiz_id}",
+                    )
                     st.session_state.page = "result"
                     st.rerun()
 
 
+
+def render_optional_interest(options: List[str], key_prefix: str) -> str:
+    """Render an optional interest field without blocking the full result."""
+    current = str(st.session_state.u_interest or "").strip()
+    if current.startswith("其他："):
+        default_index = 1 + options.index("其他（可填）")
+    elif current in options:
+        default_index = 1 + options.index(current)
+    else:
+        default_index = 0
+
+    selection = st.selectbox(
+        "想繼續深入的方向（選填）",
+        [INTEREST_PLACEHOLDER] + options,
+        index=default_index,
+        key=f"{key_prefix}_interest_select_v2",
+        disabled=bool(st.session_state.notified),
+    )
+    other_text = ""
+    if selection == "其他（可填）":
+        other_text = st.text_input(
+            "其他方向",
+            value=st.session_state.u_interest_other,
+            key=f"{key_prefix}_interest_other_v2",
+            disabled=bool(st.session_state.notified),
+        )
+        st.session_state.u_interest_other = str(other_text or "")
+
+    if not st.session_state.notified:
+        st.session_state.u_interest = _normalize_interest(selection, other_text)
+    return str(st.session_state.u_interest or "").strip()
+
+
+def save_optional_lead(save_fn, *, quiz_id: str, interest: str) -> str:
+    """Persist only after the visitor explicitly opts in."""
+    if not interest:
+        st.caption("你可以不選興趣、不建立名單，完整結果與分享功能仍可使用。")
+        return str(st.session_state.notified_lead_id or "")
+
+    if st.session_state.notified:
+        st.success("已儲存你的選擇並通知分享夥伴。")
+        return str(st.session_state.notified_lead_id or "")
+
+    st.caption("按下按鈕後，稱呼、測驗結果與興趣才會寫入名單並通知分享夥伴。")
+    if st.button("同意儲存結果並通知分享夥伴", key=f"save_lead_v2_{quiz_id}"):
+        try:
+            track_event(
+                "interest_opted_in",
+                quiz_id=quiz_id,
+                meta={"interest": interest},
+                once_key=f"interest_opted_in|{quiz_id}|{interest}",
+            )
+            lead_id = str(save_fn() or "")
+            st.session_state.notified = True
+            st.session_state.notified_lead_id = lead_id
+            track_event(
+                "lead_saved",
+                quiz_id=quiz_id,
+                lead_id=lead_id,
+                once_key=f"lead_saved|{quiz_id}|{lead_id}",
+            )
+            st.success("已儲存。你仍可自由選擇是否加 LINE。")
+        except Exception as exc:
+            st.warning("結果仍可正常查看，但名單寫入或通知暫時失敗。")
+            if DEBUG:
+                st.exception(exc)
+    return str(st.session_state.notified_lead_id or "")
+
+
 def page_result():
     show_partner_card()
-    render_sticky_cta(label="➕ 加顧問 LINE（領取完整報告）")
     render_header()
 
-    is_wealth = (st.session_state.quiz_id == "wealth")
+    is_wealth = st.session_state.quiz_id == "wealth"
     total = WEALTH_TOTAL if is_wealth else HEALTH_TOTAL
-
     if len(st.session_state.answers_map) < total:
-        st.warning("⚠️ 你尚未完成全部題目，系統已幫你返回題目頁。")
+        st.warning("⚠️ 尚未完成全部題目，已返回未完成的位置。")
         st.session_state.page = "quiz"
-        st.session_state.step = max(1, len(st.session_state.answers_map))
+        st.session_state.step = min(total, max(1, len(st.session_state.answers_map) + 1))
         st.rerun()
 
-    st.balloons()
-    st.markdown(f'<div class="hero-title">{st.session_state.u_name} 的分析報告</div>', unsafe_allow_html=True)
+    display_name = (
+        "你的" if st.session_state.u_name == "匿名訪客"
+        else f"{html_escape(st.session_state.u_name)} 的"
+    )
+    st.markdown(
+        f'<div class="hero-title">{display_name}完整分析報告</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption("完整結果已解鎖；以下任何聯絡與資料儲存都是選填。")
 
-    p_name = str(partner.get("name", "")).strip() or "顧問"
+    p_name = str(partner.get("name", "")).strip() or "分享夥伴"
+    render_sticky_cta(label=f"💬 加 LINE 討論這份結果")
 
-    # ========= 財富結果 =========
     if is_wealth:
         counts = Counter(st.session_state.answers_map.values())
         primary, secondary = pick_primary_secondary(counts)
-
         persona_name = DB_P.get(primary, primary)
         if secondary:
             persona_name = f"{DB_P.get(primary, primary)} × {DB_P.get(secondary, secondary)}"
+        tcopy = TYPE_COPY.get(primary, TYPE_COPY["A"])
 
+        track_event(
+            "result_viewed",
+            quiz_id="wealth",
+            meta={"primary": primary, "secondary": secondary},
+            once_key="result_viewed|wealth",
+        )
         st.markdown(f"### ✅ 類型：**{persona_name}**")
-        st.markdown("#### 📊 五力分析雷達圖")
+        st.markdown("#### 📊 四力分析雷達圖")
         render_radar_chart_wealth(st.session_state.answers_map)
 
-        st.markdown("---")
-        st.markdown("### ✅ 最後一步：你對什麼課程有興趣？（必填）")
-
-        def _interest_default_index(cur: str, options: List[str]):
-            cur = str(cur or "").strip()
-            if not cur:
-                return 0
-            if cur.startswith("其他："):
-                return 1 + options.index("其他（可填）")
-            if cur in options:
-                return 1 + options.index(cur)
-            return 0
-
-        interest_selection = st.selectbox(
-            "請選擇（必填）",
-            [INTEREST_PLACEHOLDER] + WEALTH_INTEREST_OPTIONS,
-            index=_interest_default_index(st.session_state.u_interest, WEALTH_INTEREST_OPTIONS),
-            key="wealth_interest_select",
-            disabled=bool(st.session_state.notified),
-        )
-
-        other_text = ""
-        if interest_selection == "其他（可填）":
-            other_text = st.text_input(
-                "其他（請填寫）",
-                value=st.session_state.u_interest_other,
-                key="wealth_interest_other",
-                disabled=bool(st.session_state.notified),
-            )
-
-        interest_final = _normalize_interest(interest_selection, other_text)
-        if interest_selection == "其他（可填）":
-            st.session_state.u_interest_other = str(other_text or "")
-
-        if interest_final:
-            st.session_state.u_interest = interest_final
-
-        ready = bool(st.session_state.u_interest)
-        if not ready and not st.session_state.notified:
-            st.info("請先完成「興趣（必填）」選擇，系統才會寫入名單並推播通知。")
-            return
-
-        st.markdown("---")
-        st.markdown("## 🧠 解析")
-        st.caption("先理解，再決定下一步怎麼走。")
-
+        st.markdown("## 🧠 完整解析")
         soothe = soothe_line_from_state(st.session_state.u_state)
-        st.markdown("### 你的內在狀態")
-        st.write(f"🫶 {soothe}")
-
+        if soothe:
+            st.markdown("### 你的內在狀態")
+            st.write(f"🫶 {soothe}")
         st.markdown("### 你的風格傾向")
-        tcopy = TYPE_COPY.get(primary, TYPE_COPY["A"])
         st.write(tcopy["analysis"])
-
         st.markdown("### 你可能正在經歷的感受")
         st.write(str(tcopy["understand"]))
 
@@ -1964,36 +2305,42 @@ def page_result():
         st.markdown(
             f"""
             <div class="glass-card">
-              <div class="glass-title">🧭 下一步建議</div>
-              <div class="glass-body">{advice}</div>
-              <div class="glass-hint">（你可以直接把下方「可直接貼 LINE」複製給 {p_name}，他會更快幫你對接最適合的下一步）</div>
+              <div class="glass-title">🧭 可以先做的一步</div>
+              <div class="glass-body">{html_escape(advice)}</div>
+              <div class="glass-hint">先保留結果，再由你決定要不要找 {html_escape(p_name)} 討論。</div>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        st.markdown("## 🎬 建議")
-        outro_key = _interest_key_for_outro(st.session_state.u_interest)
-        outro_template = OUTRO_BY_INTEREST.get(outro_key, OUTRO_BY_INTEREST["其他（可填）"])
-        st.write(outro_template.format(p_name=p_name))
+        st.markdown("---")
+        st.markdown("## 想繼續深入嗎？")
+        interest = render_optional_interest(WEALTH_INTEREST_OPTIONS, "wealth")
+        if interest:
+            outro_key = _interest_key_for_outro(interest)
+            outro_template = OUTRO_BY_INTEREST.get(
+                outro_key,
+                OUTRO_BY_INTEREST["其他（可填）"],
+            )
+            st.write(outro_template.format(p_name=p_name))
 
-        if not st.session_state.notified:
-            try:
-                lid = write_lead_and_notify_wealth(primary, secondary, persona_name, counts, st.session_state.u_interest)
-                st.session_state.notified = True
-                st.session_state.notified_lead_id = lid
-            except Exception as e:
-                st.warning("名單已產生，但寫入 leads 或推播失敗。")
-                if DEBUG:
-                    st.exception(e)
-
-        lead_id = st.session_state.notified_lead_id or ""
+        lead_id = save_optional_lead(
+            lambda: write_lead_and_notify_wealth(
+                primary,
+                secondary,
+                persona_name,
+                counts,
+                interest,
+            ),
+            quiz_id="wealth",
+            interest=interest,
+        )
 
         st.markdown("---")
-        st.markdown("## 🧾 AI 風格診斷｜可直接貼 LINE")
+        st.markdown("## 🧾 結果摘要｜可直接貼 LINE")
         share_text = build_line_share_text_wealth(
             client_name=st.session_state.u_name,
-            interest=str(st.session_state.u_interest),
+            interest=interest or "尚未選擇",
             state=str(st.session_state.u_state),
             primary=primary,
             secondary=secondary,
@@ -2002,43 +2349,9 @@ def page_result():
             answers_map=st.session_state.answers_map,
         )
         st.code(share_text, language=None)
+        render_copy_box(share_text, "複製結果摘要", "wealth_summary")
+        render_result_share_pack(persona_name, str(tcopy["analysis"]))
 
-        share_js = json.dumps(share_text, ensure_ascii=False)
-        components.html(
-            f"""
-            <div style="font-family:-apple-system,BlinkMacSystemFont,'Microsoft JhengHei',sans-serif;">
-              <button id="copyShareBtn" style="
-                width:100%;
-                padding:12px 14px;
-                border-radius:14px;
-                border:1px solid rgba(255,215,0,0.25);
-                background: linear-gradient(135deg, rgba(255,215,0,0.92), rgba(255,200,87,0.92));
-                color:#0B0B10;
-                font-weight:900;
-                cursor:pointer;
-              ">一鍵複製（可直接貼 LINE）</button>
-              <div id="msgCopy" style="margin-top:8px; color:#B8B8C6; font-size:13px;"></div>
-            </div>
-            <script>
-              const txt = {share_js};
-              const btn = document.getElementById("copyShareBtn");
-              const msg = document.getElementById("msgCopy");
-              btn.addEventListener("click", async () => {{
-                try {{
-                  await navigator.clipboard.writeText(txt);
-                  msg.textContent = "✅ 已複製到剪貼簿（直接貼 LINE 就能用）";
-                }} catch (e) {{
-                  msg.textContent = "⚠️ 無法自動複製（請手動選取複製）";
-                }}
-              }});
-            </script>
-            """,
-            height=92,
-        )
-        if lead_id:
-            st.caption(f"🆔 lead_id：{lead_id}")
-
-    # ========= 健康結果 =========
     else:
         report = compute_health_report(st.session_state.answers_map)
         band = report["band"]
@@ -2049,108 +2362,56 @@ def page_result():
         flags = report["flags_yes"]
         sec_scores = report.get("sections_score", {}) or {}
 
+        track_event(
+            "result_viewed",
+            quiz_id="health",
+            meta={"band": band, "top_section": top_sec},
+            once_key="result_viewed|health",
+        )
         st.markdown(f"### ✅ 結果：**{band}**（{total_score}/{max_score}）")
         st.progress(min(total_score / max(max_score, 1), 1.0))
         st.markdown(f"**🔎 最高分關卡：{top_sec}**")
         st.markdown(f"**🎯 痛點句：{painpoint}**")
-
-        # ✅ 固定 4 軸雷達圖（本版最重要）
         render_radar_chart_health(sec_scores)
 
-        # ✅ Top3 訊號（含建議）
         top_items = report.get("top_items", []) or []
         if top_items:
-            st.markdown("### 🔥 Top3 訊號（含建議）")
-            for t in top_items:
-                st.write(f"• （{t['section']}）{t['text']} → {t['answer']}")
-                if t.get("tip"):
-                    st.caption(f"✅ 建議：{t['tip']}")
+            st.markdown("### 🔥 Top3 訊號與建議")
+            for item in top_items:
+                st.write(f"• （{item['section']}）{item['text']} → {item['answer']}")
+                if item.get("tip"):
+                    st.caption(f"✅ 建議：{item['tip']}")
         else:
-            st.caption("✅ 目前沒有明顯高頻扣分訊號（維持住就很強）。")
+            st.caption("✅ 目前沒有明顯高頻扣分訊號，繼續維持目前節奏。")
 
         if flags:
-            st.error("🚩 你勾選了紅旗題：建議優先就醫/專業評估（此測驗僅自我檢視非診斷）。")
+            st.error("🚩 你勾選了紅旗題：建議優先尋求醫療或專業評估；本測驗不是診斷。")
 
-        st.markdown("---")
-        st.markdown("### ✅ 最後一步：你想先對接哪一種支援？（必填）")
-
-        def _interest_default_index2(cur: str, options: List[str]):
-            cur = str(cur or "").strip()
-            if not cur:
-                return 0
-            if cur.startswith("其他："):
-                return 1 + options.index("其他（可填）")
-            if cur in options:
-                return 1 + options.index(cur)
-            return 0
-
-        interest_selection = st.selectbox(
-            "請選擇（必填）",
-            [INTEREST_PLACEHOLDER] + HEALTH_INTEREST_OPTIONS,
-            index=_interest_default_index2(st.session_state.u_interest, HEALTH_INTEREST_OPTIONS),
-            key="health_interest_select",
-            disabled=bool(st.session_state.notified),
-        )
-
-        other_text = ""
-        if interest_selection == "其他（可填）":
-            other_text = st.text_input(
-                "其他（請填寫）",
-                value=st.session_state.u_interest_other,
-                key="health_interest_other",
-                disabled=bool(st.session_state.notified),
-            )
-
-        interest_final = _normalize_interest(interest_selection, other_text)
-        if interest_selection == "其他（可填）":
-            st.session_state.u_interest_other = str(other_text or "")
-
-        if interest_final:
-            st.session_state.u_interest = interest_final
-
-        ready = bool(st.session_state.u_interest)
-        if not ready and not st.session_state.notified:
-            st.info("請先完成「興趣（必填）」選擇，系統才會寫入名單並推播通知。")
-            return
-
-        st.markdown("---")
-        st.markdown("## 🧠 解析")
-        st.caption("先理解，再決定下一步怎麼走。")
+        st.markdown("## 🧠 完整解析")
         st.write(report.get("interpret") or "先把身體回到穩定，很多事就會順起來。")
 
-        st.markdown(
-            f"""
-            <div class="glass-card">
-              <div class="glass-title">🧭 下一步對接話術</div>
-              <div class="glass-body">請 {p_name} 依這份健康對帳，幫我安排最適合的下一步（方法/講座/節奏）。我想先從「{st.session_state.u_interest}」開始。</div>
-              <div class="glass-hint">（你可以直接把下方「可直接貼 LINE」複製給 {p_name}）</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
+        st.markdown("---")
+        st.markdown("## 想繼續深入嗎？")
+        interest = render_optional_interest(HEALTH_INTEREST_OPTIONS, "health")
+        if interest:
+            outro_key = _interest_key_for_outro(interest)
+            outro = HEALTH_OUTRO_BY_INTEREST.get(
+                outro_key,
+                HEALTH_OUTRO_BY_INTEREST["其他（可填）"],
+            )
+            st.write(outro.format(p_name=p_name))
+
+        lead_id = save_optional_lead(
+            lambda: write_lead_and_notify_health(report, interest),
+            quiz_id="health",
+            interest=interest,
         )
 
-        st.markdown("## 🎬 建議")
-        key = _interest_key_for_outro(st.session_state.u_interest)
-        outro = HEALTH_OUTRO_BY_INTEREST.get(key, HEALTH_OUTRO_BY_INTEREST["其他（可填）"])
-        st.write(outro.format(p_name=p_name))
-
-        if not st.session_state.notified:
-            try:
-                lid = write_lead_and_notify_health(report, st.session_state.u_interest)
-                st.session_state.notified = True
-                st.session_state.notified_lead_id = lid
-            except Exception as e:
-                st.warning("名單已產生，但寫入 leads 或推播失敗。")
-                if DEBUG:
-                    st.exception(e)
-
-        lead_id = st.session_state.notified_lead_id or ""
-
         st.markdown("---")
-        st.markdown("## 🧾 健康對帳｜可直接貼 LINE")
+        st.markdown("## 🧾 健康結果摘要｜可直接貼 LINE")
         share_text = build_line_share_text_health(
             client_name=st.session_state.u_name,
-            interest=str(st.session_state.u_interest),
+            interest=interest or "尚未選擇",
             state=str(st.session_state.u_state),
             lead_id=lead_id,
             partner_name=p_name,
@@ -2158,44 +2419,13 @@ def page_result():
             answers_map=st.session_state.answers_map,
         )
         st.code(share_text, language=None)
+        render_copy_box(share_text, "複製健康結果摘要", "health_summary")
+        render_result_share_pack(str(band), str(painpoint))
 
-        share_js = json.dumps(share_text, ensure_ascii=False)
-        components.html(
-            f"""
-            <div style="font-family:-apple-system,BlinkMacSystemFont,'Microsoft JhengHei',sans-serif;">
-              <button id="copyShareBtn2" style="
-                width:100%;
-                padding:12px 14px;
-                border-radius:14px;
-                border:1px solid rgba(6,199,85,0.35);
-                background: linear-gradient(135deg, rgba(6,199,85,0.92), rgba(32,210,120,0.92));
-                color:#0B0B10;
-                font-weight:900;
-                cursor:pointer;
-              ">一鍵複製（可直接貼 LINE）</button>
-              <div id="msgCopy2" style="margin-top:8px; color:#B8B8C6; font-size:13px;"></div>
-            </div>
-            <script>
-              const txt = {share_js};
-              const btn = document.getElementById("copyShareBtn2");
-              const msg = document.getElementById("msgCopy2");
-              btn.addEventListener("click", async () => {{
-                try {{
-                  await navigator.clipboard.writeText(txt);
-                  msg.textContent = "✅ 已複製到剪貼簿（直接貼 LINE 就能用）";
-                }} catch (e) {{
-                  msg.textContent = "⚠️ 無法自動複製（請手動選取複製）";
-                }}
-              }});
-            </script>
-            """,
-            height=92,
-        )
-        if lead_id:
-            st.caption(f"🆔 lead_id：{lead_id}")
-
+    if st.session_state.notified_lead_id:
+        st.caption(f"🆔 lead_id：{st.session_state.notified_lead_id}")
     st.markdown("---")
-    if st.button("重新測驗", key="reset_btn"):
+    if st.button("重新測驗", key="reset_btn_v2"):
         reset_all(keep_profile=False)
         st.rerun()
 
@@ -2204,6 +2434,8 @@ def page_result():
 # 17) Admin Panel（主控/顧問）
 # =========================
 def sidebar_admin_panel():
+    if not ADMIN_PANEL_ENABLED:
+        return
     st.sidebar.write("---")
     pwd = st.sidebar.text_input("🔐 管理授權碼", type="password")
     if not pwd:
@@ -2214,7 +2446,7 @@ def sidebar_admin_panel():
         all_leads = gs_read(conn, "leads", ttl=0 if DEBUG else 30)
         all_leads.columns = all_leads.columns.str.strip().str.lower()
 
-        admin_pwd = str(st.secrets.get("ADMIN_PWD", "")).strip()
+        admin_pwd = str(secret_value("ADMIN_PWD", default="")).strip()
         partner_pwd = str(partner.get("password", "")).strip()
         partner_ref = str(partner.get("ref", "")).strip()
 

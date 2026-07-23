@@ -1,0 +1,115 @@
+"""Streamlit smoke tests that never connect to production services."""
+
+from __future__ import annotations
+
+import os
+import unittest
+
+os.environ["RICH_DEMO_MODE"] = "1"
+
+from streamlit.testing.v1 import AppTest
+
+
+APP_FILE = "app.py"
+
+
+def make_app(*, entry: str = "friend", quiz: str = "wealth") -> AppTest:
+    app = AppTest.from_file(APP_FILE, default_timeout=60)
+    app.query_params["ref"] = "master"
+    app.query_params["src"] = "line" if entry == "friend" else "ig"
+    app.query_params["campaign"] = "qa"
+    app.query_params["entry"] = entry
+    app.query_params["quiz"] = quiz
+    return app
+
+
+def set_result_state(app: AppTest, quiz: str) -> None:
+    app.session_state["page"] = "result"
+    app.session_state["quiz_id"] = quiz
+    app.session_state["u_name"] = "QA訪客"
+    app.session_state["u_state"] = "我想提升財富"
+    if quiz == "wealth":
+        app.session_state["answers_map"] = {i: "A" for i in range(1, 11)}
+    else:
+        app.session_state["answers_map"] = {i: 0 for i in range(1, 11)}
+
+
+class StreamlitDemoSmokeTest(unittest.TestCase):
+    def test_three_entry_messages_render(self) -> None:
+        expectations = {
+            "friend": "先了解自己，再決定下一步怎麼走",
+            "cold": "你不是不努力，可能只是還沒找到適合自己的行動方式",
+            "social": "快速看見你現在最值得優先調整的一步",
+        }
+        for entry, expected in expectations.items():
+            with self.subTest(entry=entry):
+                app = make_app(entry=entry)
+                app.run()
+                self.assertEqual(len(app.exception), 0)
+                markdown = "\n".join(element.value for element in app.markdown)
+                self.assertIn(expected, markdown)
+
+    def test_quiz_requires_an_explicit_answer(self) -> None:
+        app = make_app()
+        app.session_state["page"] = "quiz"
+        app.session_state["quiz_id"] = "wealth"
+        app.session_state["step"] = 1
+        app.session_state["answers_map"] = {}
+        app.run()
+
+        self.assertEqual(len(app.exception), 0)
+        self.assertEqual(len(app.radio), 1)
+        self.assertIsNone(app.radio[0].value)
+        self.assertEqual(
+            [button.label for button in app.button],
+            ["⬅️ 上一題", "下一題 ➡️"],
+        )
+
+    def test_wealth_result_is_visible_before_opt_in(self) -> None:
+        app = make_app(quiz="wealth")
+        set_result_state(app, "wealth")
+        app.run()
+
+        self.assertEqual(len(app.exception), 0)
+        markdown = "\n".join(element.value for element in app.markdown)
+        self.assertIn("完整分析報告", markdown)
+        self.assertIn("完整解析", markdown)
+        self.assertIn("結果摘要", markdown)
+        self.assertEqual(
+            [tab.label for tab in app.tabs],
+            ["LINE", "Instagram", "Facebook", "夥伴跟進"],
+        )
+        self.assertNotIn(
+            "同意儲存結果並通知分享夥伴",
+            [button.label for button in app.button],
+        )
+
+    def test_demo_opt_in_never_writes_to_production(self) -> None:
+        app = make_app(quiz="wealth")
+        set_result_state(app, "wealth")
+        app.run()
+        app.selectbox[0].set_value(app.selectbox[0].options[1]).run()
+        app.button(key="save_lead_v2_wealth").click().run()
+
+        self.assertEqual(len(app.exception), 0)
+        self.assertTrue(app.session_state["notified"])
+        self.assertTrue(
+            str(app.session_state["notified_lead_id"]).startswith("demo-")
+        )
+
+    def test_health_result_and_share_pack_render(self) -> None:
+        app = make_app(entry="social", quiz="health")
+        set_result_state(app, "health")
+        app.run()
+
+        self.assertEqual(len(app.exception), 0)
+        markdown = "\n".join(element.value for element in app.markdown)
+        self.assertIn("健康結果摘要", markdown)
+        self.assertEqual(
+            [tab.label for tab in app.tabs],
+            ["LINE", "Instagram", "Facebook", "夥伴跟進"],
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
