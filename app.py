@@ -43,6 +43,7 @@ from humanity_profile import (
     ANIMAL_PROFILES,
     BIRTHDAY_CORES,
     HUMANITY_QUESTIONS,
+    build_life_path_report,
     calculate_life_path,
     compute_humanity_report,
 )
@@ -66,8 +67,8 @@ except Exception:
 # =========================
 st.set_page_config(page_title="2026 AI 風格診斷", page_icon="🤖", layout="centered")
 
-APP_VERSION = "growth-funnel-v3.0.0"
-BIRTHDAY_QUIZ_VERSION = "2026HUM1-20Q-v1.0"
+APP_VERSION = "growth-funnel-v3.1.0"
+BIRTHDAY_QUIZ_VERSION = "2026LIFE2-HUM20-v1.0"
 WEALTH_QUIZ_VERSION = "2026Q1-10Q-v1.2"
 HEALTH_QUIZ_VERSION = "2026H1-10Q-v1.1"
 DEFAULT_APP_URL = "https://richaiproject-xzwznzb6fdd35n8otuxgha.streamlit.app/"
@@ -871,7 +872,7 @@ def show_partner_card():
 # 7) Session State
 # =========================
 if "page" not in st.session_state:
-    st.session_state.page = "intro"  # intro / quiz / result
+    st.session_state.page = "intro"  # intro / life_path_result / quiz / result
 if "quiz_id" not in st.session_state:
     st.session_state.quiz_id = ACQUISITION.forced_quiz or "birthday"
 if "step" not in st.session_state:
@@ -1180,7 +1181,7 @@ BIRTHDAY_OUTRO_BY_INTEREST = {
 
 def quiz_label(quiz_id: str) -> str:
     return {
-        "birthday": "生命靈數 × 人性動物原型",
+        "birthday": "10 秒生命靈數",
         "wealth": "財富與行動風格",
         "health": "健康節奏對帳",
     }.get(str(quiz_id), "成長風格")
@@ -1199,7 +1200,7 @@ def quiz_card_copy(quiz_id: str) -> Dict[str, str]:
         "birthday": {
             "icon": "🔮",
             "title": quiz_label("birthday"),
-            "desc": "用完整生日算出生命靈數，再用團隊 20 題看見你的老虎、海豚、企鵝、蜜蜂或八爪風格。",
+            "desc": "輸入完整生日，先看生命路徑、生日天賦、外在態度與今年主題；想更深入，再自願進入 20 題團隊人性探索。",
         },
         "wealth": {
             "icon": "🚀",
@@ -1711,7 +1712,7 @@ def write_lead_and_notify_birthday(
     report: Dict[str, Any],
     interest: str,
 ) -> str:
-    """Persist only the derived life-path number and humanity report after opt-in."""
+    """Persist only raw-date-free derived numbers and the report after opt-in."""
     tz = timezone(timedelta(hours=8))
     now_tw = datetime.now(tz).strftime("%Y-%m-%d %H:%M")
     ref_in = norm_ref(get_qp("ref", "master"))
@@ -1950,6 +1951,45 @@ def write_lead_and_notify_health(report: Dict[str, Any], interest: str) -> str:
 # =========================
 # 13) LINE「可直接貼」文案（生命靈數 × 人性動物原型）
 # =========================
+def build_line_share_text_life_path(
+    *,
+    client_name: str,
+    partner_name: str,
+    report: Dict[str, Any],
+) -> str:
+    """Build a useful first-stage share without exposing the raw birth date."""
+    display_name = client_name if client_name != "匿名訪客" else "我"
+    return "\n".join(
+        [
+            "🔮【我的完整生命靈數摘要】",
+            f"👤 {display_name}",
+            (
+                f"✨ 生命路徑：{report.get('life_path', '')}號 "
+                f"{report.get('core_emoji', '')}{report.get('core_label', '')}"
+            ),
+            (
+                f"💎 生日天賦：{report.get('birthday_number', '')}號 "
+                f"{report.get('birthday_label', '')}"
+            ),
+            (
+                f"👀 外在態度：{report.get('attitude_number', '')}號 "
+                f"{report.get('attitude_label', '')}"
+            ),
+            (
+                f"🗓️ {report.get('report_year', '')} 主題："
+                f"{report.get('personal_year', '')}號 "
+                f"{report.get('personal_year_focus', '')}"
+            ),
+            "—",
+            f"💬 {report.get('cross_insight', '')}",
+            f"✅ 今年可以先做：{report.get('personal_year_action', '')}",
+            "—",
+            f"這份探索由 {partner_name} 分享；完整結果直接看，不用先加好友。",
+            "生命靈數屬於自我探索工具，不是科學心理測驗或診斷。",
+        ]
+    )
+
+
 def build_line_share_text_birthday(
     *,
     client_name: str,
@@ -1965,6 +2005,14 @@ def build_line_share_text_birthday(
         (
             f"🔢 生命靈數：{report.get('life_path','')}號 "
             f"{report.get('core_emoji','')} {report.get('core_label','')}"
+        ),
+        (
+            f"💎 生日天賦：{report.get('birthday_number','')}號 "
+            f"{report.get('birthday_label','')}"
+        ),
+        (
+            f"👀 外在態度：{report.get('attitude_number','')}號 "
+            f"{report.get('attitude_label','')}"
         ),
         f"🐾 團隊溝通風格：{report.get('animal_emoji','')} {report.get('animal_title','')}",
         "—",
@@ -2388,7 +2436,8 @@ def begin_quiz(
     birth_month: int = 0,
     birth_day: int = 0,
 ) -> bool:
-    if st.session_state.quiz_id == "birthday":
+    is_birthday = st.session_state.quiz_id == "birthday"
+    if is_birthday:
         try:
             life_path = calculate_life_path(
                 birth_year,
@@ -2408,20 +2457,59 @@ def begin_quiz(
     if st.session_state.quiz_id == "wealth":
         st.session_state.u_state = state_final
 
-    st.session_state.page = "quiz"
+    st.session_state.page = "life_path_result" if is_birthday else "quiz"
     st.session_state.step = 1
     st.session_state.answers_map = {}
     st.session_state.notified = False
     st.session_state.notified_lead_id = ""
     st.session_state.u_interest = ""
     st.session_state.u_interest_other = ""
-    track_event(
-        "quiz_started",
-        quiz_id=st.session_state.quiz_id,
-        once_key=f"quiz_started|{st.session_state.quiz_id}",
-    )
+    if is_birthday:
+        life_report = build_life_path_report(
+            birth_year,
+            birth_month,
+            birth_day,
+            current_year=datetime.now().year,
+        )
+        track_event(
+            "life_path_completed",
+            quiz_id="birthday",
+            meta={
+                "life_path": life_report["life_path"],
+                "birthday_number": life_report["birthday_number"],
+                "attitude_number": life_report["attitude_number"],
+                "personal_year": life_report["personal_year"],
+            },
+            once_key="life_path_completed|birthday",
+        )
+    else:
+        track_event(
+            "quiz_started",
+            quiz_id=st.session_state.quiz_id,
+            once_key=f"quiz_started|{st.session_state.quiz_id}",
+        )
     st.rerun()
     return True
+
+
+def begin_humanity_quiz() -> None:
+    """Start the optional 20-question layer after the life-path result."""
+    st.session_state.page = "quiz"
+    st.session_state.step = 1
+    st.session_state.answers_map = {}
+    track_event(
+        "humanity_quiz_started",
+        quiz_id="birthday",
+        meta={"question_count": BIRTHDAY_TOTAL},
+        once_key="humanity_quiz_started|birthday",
+    )
+    track_event(
+        "quiz_started",
+        quiz_id="birthday",
+        meta={"stage": "humanity", "question_count": BIRTHDAY_TOTAL},
+        once_key="quiz_started|birthday|humanity",
+    )
+    st.rerun()
 
 
 def page_intro():
@@ -2454,16 +2542,16 @@ def page_intro():
             f"""
             <div class="dopamine-card featured-quiz card-birthday {active_cls}">
               <div class="dopa-icon">🔮</div>
-              <div class="dopa-title">生命靈數 × 人性動物原型</div>
-              <div class="dopa-badge">本月主打｜約 2 分鐘</div>
-              <div class="dopa-desc">完整生日看 1–9 號內在動力，再用團隊 20 題找出老虎、海豚、企鵝、蜜蜂或八爪溝通風格。</div>
+              <div class="dopa-title">10 秒看見你的生命靈數</div>
+              <div class="dopa-badge">本月主打｜先看結果，不用答題</div>
+              <div class="dopa-desc">完整生日一次看生命路徑、生日天賦、外在態度、數字分布與今年主題；想更深入，再自願做 20 題人性探索。</div>
               <div class="privacy-note">完整生日只用於當次計算；結果免註冊、直接看。</div>
             </div>
             """,
             unsafe_allow_html=True,
         )
         if cur_id != "birthday":
-            if st.button("選擇生命靈數 × 動物原型", key="pick_birthday"):
+            if st.button("選擇 10 秒生命靈數", key="pick_birthday"):
                 st.session_state.quiz_id = "birthday"
                 track_event(
                     "quiz_selected",
@@ -2589,7 +2677,7 @@ def page_intro():
 
     st.caption("免註冊，完整結果直接看；只有主動同意才會建立後續名單。")
     start_label = (
-        "立即探索我的生命原型"
+        "立即看我的完整生命靈數"
         if st.session_state.quiz_id == "birthday"
         else ENTRY_UI["start_label"]
     )
@@ -2619,6 +2707,165 @@ def page_intro():
 
     st.markdown("---")
     render_campaign_share_pack()
+
+
+def page_life_path_result():
+    """Show the complete birthday-derived layer before the optional 20 items."""
+    show_partner_card()
+    render_header()
+
+    try:
+        report = build_life_path_report(
+            st.session_state.birth_year,
+            st.session_state.birth_month,
+            st.session_state.birth_day,
+            current_year=datetime.now().year,
+        )
+    except (TypeError, ValueError):
+        st.warning("生命靈數資料已失效，請重新輸入完整生日。")
+        st.session_state.page = "intro"
+        st.rerun()
+        return
+
+    track_event(
+        "life_path_result_viewed",
+        quiz_id="birthday",
+        meta={
+            "life_path": report["life_path"],
+            "birthday_number": report["birthday_number"],
+            "attitude_number": report["attitude_number"],
+            "personal_year": report["personal_year"],
+        },
+        once_key="life_path_result_viewed|birthday",
+    )
+
+    display_name = (
+        "你的"
+        if st.session_state.u_name == "匿名訪客"
+        else f"{html_escape(st.session_state.u_name)} 的"
+    )
+    st.markdown(
+        f'<div class="hero-title">{display_name}完整生命靈數</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption("第一階段結果已完整顯示，不用做 20 題，也不用先留下聯絡資料。")
+
+    st.markdown(
+        f"## {report['core_emoji']} {report['life_path']} 號・{report['core_label']}"
+    )
+    st.write(report["core_essence"])
+    strength_text = "、".join(report["core_strengths"])
+    st.markdown(f"**核心優勢：** {strength_text}")
+    st.markdown(f"**容易忽略：** {report['core_blind_spot']}")
+
+    st.markdown("### 🧩 四組生日數字交叉解讀")
+    st.markdown(
+        f"""
+        <div class="glass-card">
+          <div class="glass-title">💎 生日天賦｜{report["birthday_number"]} 號・{html_escape(report["birthday_label"])}</div>
+          <div class="glass-body">{html_escape(report["birthday_gift"])}</div>
+          <div class="glass-hint">這組數字用來提醒你較容易上手、可以主動運用的能力。</div>
+        </div>
+        <div class="glass-card">
+          <div class="glass-title">👀 外在態度｜{report["attitude_number"]} 號・{html_escape(report["attitude_label"])}</div>
+          <div class="glass-body">{html_escape(report["attitude_approach"])}</div>
+          <div class="glass-hint">{html_escape(report["attitude_practice"])}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.info(report["cross_insight"])
+
+    st.markdown(
+        f"### 🗓️ {report['report_year']} 個人年｜"
+        f"{report['personal_year']} 號・{report['personal_year_focus']}"
+    )
+    st.write(
+        "這是依出生月日與今年年份推導的年度提醒，"
+        "適合拿來設定觀察方向，不代表事件預測。"
+    )
+    st.markdown(
+        f"""
+        <div class="glass-card">
+          <div class="glass-title">✅ 今年可以先做的一步</div>
+          <div class="glass-body">{html_escape(report["personal_year_action"])}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    with st.expander("看完整數字分布與待練習方向", expanded=False):
+        st.markdown(
+            f"**出生月份能量：** {report['month_number']} 號・"
+            f"{report['month_label']}（{report['month_gift']}）"
+        )
+        st.markdown(
+            f"**出生年份背景：** {report['generation_number']} 號・"
+            f"{report['generation_label']}（{report['generation_gift']}）"
+        )
+        if report["repeated_numbers"]:
+            st.markdown("**較常出現的數字：**")
+            for item in report["repeated_numbers"]:
+                st.write(
+                    f"• {item['number']} 號出現 {item['count']} 次｜"
+                    f"{item['label']}：{item['gift']}"
+                )
+        else:
+            st.write("數字分布較平均，沒有出現兩次以上的非零數字。")
+
+        if report["missing_themes"]:
+            st.markdown("**生日中未出現的數字（當成練習題，不是缺點）：**")
+            for item in report["missing_themes"]:
+                st.write(
+                    f"• {item['number']} 號・{item['label']}｜{item['practice']}"
+                )
+        else:
+            st.write("1–9 的數字都有出現，沒有未出現的數字。")
+
+    st.caption(
+        "🔒 完整生日只留在這次瀏覽階段；事件追蹤、名單與分享文字都不含出生年月日。"
+    )
+    st.caption(
+        "說明：生命靈數各流派的算法與詮釋不同，這裡採 1–9 單數化作為自我反思框架；"
+        "不是經科學驗證的心理測驗、預測或診斷。"
+    )
+
+    st.markdown("---")
+    st.markdown("## 想知道你在團隊裡怎麼被看見嗎？")
+    st.write("生命靈數看內在主軸；下一階段用情境題觀察你平常的溝通與合作反應。")
+    st.caption("進階人性探索｜約 2 分鐘・20 題，可隨時返回；不影響上面的生命靈數結果。")
+
+    with st.container(key="inline_start_cta"):
+        inline_advanced_clicked = st.button(
+            "進階人性探索｜約 2 分鐘・20 題",
+            key="start_humanity_btn",
+        )
+    with st.container(key="mobile_start_cta"):
+        mobile_advanced_clicked = st.button(
+            "🚀 進階人性探索｜20 題",
+            key="start_humanity_btn_mobile",
+        )
+    if inline_advanced_clicked or mobile_advanced_clicked:
+        begin_humanity_quiz()
+
+    p_name = str(partner.get("name", "")).strip() or "分享夥伴"
+    st.markdown("---")
+    st.markdown("## 🧾 我的生命靈數｜現在就能分享")
+    share_text = build_line_share_text_life_path(
+        client_name=st.session_state.u_name,
+        partner_name=p_name,
+        report=report,
+    )
+    st.code(share_text, language=None)
+    render_copy_box(share_text, "複製我的生命靈數", "life_path_summary")
+    render_result_share_pack(
+        f"{report['life_path']}號{report['core_label']}",
+        report["summary"],
+    )
+
+    if st.button("重新輸入生日", key="restart_life_path"):
+        reset_all(keep_profile=False)
+        st.rerun()
 
 
 def page_quiz():
@@ -2672,7 +2919,7 @@ def page_quiz():
                     if step > 1:
                         st.session_state.step = step - 1
                     else:
-                        st.session_state.page = "intro"
+                        st.session_state.page = "life_path_result"
                     st.rerun()
 
             with c2:
@@ -2688,6 +2935,12 @@ def page_quiz():
                         st.session_state.step = step + 1
                         st.rerun()
                     else:
+                        track_event(
+                            "humanity_quiz_completed",
+                            quiz_id="birthday",
+                            step=total,
+                            once_key="humanity_quiz_completed|birthday",
+                        )
                         track_event(
                             "quiz_completed",
                             quiz_id=quiz_id,
@@ -2903,6 +3156,26 @@ def page_result():
             st.session_state.answers_map,
             life_path,
         )
+        life_report = build_life_path_report(
+            st.session_state.birth_year,
+            st.session_state.birth_month,
+            st.session_state.birth_day,
+            current_year=datetime.now().year,
+        )
+        for key in (
+            "birthday_number",
+            "birthday_label",
+            "birthday_gift",
+            "attitude_number",
+            "attitude_label",
+            "attitude_approach",
+            "personal_year",
+            "personal_year_focus",
+            "personal_year_action",
+            "report_year",
+            "cross_insight",
+        ):
+            report[key] = life_report[key]
         track_event(
             "result_viewed",
             quiz_id="birthday",
@@ -2921,9 +3194,21 @@ def page_result():
         st.markdown(
             f"**內在動力：生命靈數 {report['life_path']} 號・{report['core_label']}**"
         )
+        st.markdown(
+            f"**生日天賦：{report['birthday_number']} 號・{report['birthday_label']}**"
+            f"｜{report['birthday_gift']}"
+        )
+        st.markdown(
+            f"**外在態度：{report['attitude_number']} 號・{report['attitude_label']}**"
+        )
         st.markdown(f"**外在／團隊風格：{report['animal_title']}**")
         st.write(report["summary"])
-        st.caption("完整生日不會出現在事件追蹤、名單或分享文字；只保留推導後的生命靈數。")
+        st.info(report["cross_insight"])
+        st.markdown(
+            f"**{report['report_year']} 個人年：{report['personal_year']} 號・"
+            f"{report['personal_year_focus']}**"
+        )
+        st.caption("完整生日不會出現在事件追蹤、名單或分享文字；只使用不含原始日期的推導數字。")
 
         st.markdown("#### 📊 四種動物傾向")
         render_radar_chart_birthday(report["scores"])
@@ -3201,6 +3486,8 @@ def sidebar_admin_panel():
 # =========================
 if st.session_state.page == "intro":
     page_intro()
+elif st.session_state.page == "life_path_result":
+    page_life_path_result()
 elif st.session_state.page == "quiz":
     page_quiz()
 else:

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import date
-from typing import Any, Dict, Mapping
+from typing import Any, Dict, Mapping, Optional
 
 
 ANIMAL_ORDER = [1, 2, 3, 4]
@@ -136,6 +136,89 @@ LIFE_PATH_PROFILES = {
 
 # Keep the old public name for existing integrations while the UI migrates.
 BIRTHDAY_CORES = LIFE_PATH_PROFILES
+
+
+NUMBER_THEMES = {
+    1: {
+        "label": "開創",
+        "gift": "主動、自主、敢先開始",
+        "approach": "遇到新情境時，傾向先抓方向並採取行動。",
+        "practice": "練習邀請別人參與，而不是凡事自己扛。",
+        "year_focus": "啟動與重新定位",
+        "year_action": "選一件最想開始的事，先做出第一個可見版本。",
+    },
+    2: {
+        "label": "協調",
+        "gift": "感受、傾聽、連結關係",
+        "approach": "遇到新情境時，會先觀察氣氛與彼此需求。",
+        "practice": "在照顧關係時，也清楚說出自己的立場。",
+        "year_focus": "合作與耐心醞釀",
+        "year_action": "找一位可信任的人，把想法透過合作慢慢做深。",
+    },
+    3: {
+        "label": "表達",
+        "gift": "創意、樂觀、傳遞想法",
+        "approach": "遇到新情境時，會透過互動與表達找到可能性。",
+        "practice": "把好點子收斂成一個期限與完成標準。",
+        "year_focus": "表達與被看見",
+        "year_action": "公開分享一個作品、觀點或真實感受。",
+    },
+    4: {
+        "label": "建造",
+        "gift": "秩序、務實、穩定累積",
+        "approach": "遇到新情境時，會先確認規則、資源與可行步驟。",
+        "practice": "保留一點彈性，允許先試再調整。",
+        "year_focus": "打底與建立系統",
+        "year_action": "替重要目標建立一個每週能持續的固定節奏。",
+    },
+    5: {
+        "label": "探索",
+        "gift": "彈性、好奇、快速適應",
+        "approach": "遇到新情境時，會先尋找變化、選項與自由空間。",
+        "practice": "在切換方向前，先完成一個可驗證的小成果。",
+        "year_focus": "改變與拓展經驗",
+        "year_action": "安排一次有邊界的新嘗試，擴大經驗而不失控。",
+    },
+    6: {
+        "label": "守護",
+        "gift": "責任、照顧、創造歸屬",
+        "approach": "遇到新情境時，會先確認人是否被照顧、承諾是否穩定。",
+        "practice": "付出之前先檢查自己的能量與界線。",
+        "year_focus": "關係、承諾與生活品質",
+        "year_action": "修復一段重要關係，或改善一個每天都會接觸的環境。",
+    },
+    7: {
+        "label": "洞察",
+        "gift": "研究、思辨、理解本質",
+        "approach": "遇到新情境時，會先退一步觀察、蒐集與理解。",
+        "practice": "不用等到完全確定，先用低風險方式驗證想法。",
+        "year_focus": "沉澱、學習與內在整理",
+        "year_action": "固定留一段不被打擾的時間，深化真正重要的問題。",
+    },
+    8: {
+        "label": "成就",
+        "gift": "整合、企圖、推動成果",
+        "approach": "遇到新情境時，會先衡量目標、資源與影響力。",
+        "practice": "成果之外，也把人的感受與長期代價納入決策。",
+        "year_focus": "成果、資源與影響力",
+        "year_action": "把一個重要目標量化，並每週檢查最關鍵的進度。",
+    },
+    9: {
+        "label": "奉獻",
+        "gift": "同理、格局、看見共同利益",
+        "approach": "遇到新情境時，會先看整體意義與對他人的影響。",
+        "practice": "分辨同理與過度承擔，保留自己的界線。",
+        "year_focus": "完成、整理與放下",
+        "year_action": "完成一件拖延已久的事，替下一個循環騰出空間。",
+    },
+}
+
+
+def _reduce_to_digit(value: int) -> int:
+    value = abs(int(value))
+    while value > 9:
+        value = sum(int(char) for char in str(value))
+    return value
 
 
 HUMANITY_QUESTIONS = [
@@ -347,12 +430,135 @@ def calculate_life_path(year: int, month: int, day: int) -> int:
     year = int(year)
     month = int(month)
     day = int(day)
-    date(year, month, day)
+    birth_date = date(year, month, day)
+    if birth_date > date.today():
+        raise ValueError("birth date cannot be in the future")
 
     value = sum(int(char) for char in f"{year:04d}{month:02d}{day:02d}")
-    while value > 9:
-        value = sum(int(char) for char in str(value))
-    return value
+    return _reduce_to_digit(value)
+
+
+def build_life_path_report(
+    year: int,
+    month: int,
+    day: int,
+    *,
+    current_year: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Build a richer, raw-date-free reflection report from one birth date.
+
+    The returned mapping deliberately excludes the original year, month and day
+    so it can be used by the UI, sharing and analytics without retaining the
+    visitor's full birth date.
+    """
+    year = int(year)
+    month = int(month)
+    day = int(day)
+    birth_date = date(year, month, day)
+    if birth_date > date.today():
+        raise ValueError("birth date cannot be in the future")
+
+    report_year = int(current_year or date.today().year)
+    if report_year < 1:
+        raise ValueError("current_year must be positive")
+
+    life_path = calculate_life_path(year, month, day)
+    birthday_number = _reduce_to_digit(day)
+    attitude_number = _reduce_to_digit(month + day)
+    month_number = _reduce_to_digit(month)
+    generation_number = _reduce_to_digit(year)
+    personal_year = _reduce_to_digit(month + day + report_year)
+
+    birth_digits = [
+        int(char)
+        for char in f"{year:04d}{month:02d}{day:02d}"
+        if char != "0"
+    ]
+    digit_counts = Counter(birth_digits)
+    repeated_numbers = [
+        {
+            "number": number,
+            "count": int(digit_counts[number]),
+            "label": NUMBER_THEMES[number]["label"],
+            "gift": NUMBER_THEMES[number]["gift"],
+        }
+        for number in range(1, 10)
+        if digit_counts[number] > 1
+    ]
+    repeated_numbers.sort(key=lambda item: (-item["count"], item["number"]))
+    missing_numbers = [
+        number for number in range(1, 10) if digit_counts[number] == 0
+    ]
+
+    core = LIFE_PATH_PROFILES[life_path]
+    birthday_theme = NUMBER_THEMES[birthday_number]
+    attitude_theme = NUMBER_THEMES[attitude_number]
+    month_theme = NUMBER_THEMES[month_number]
+    generation_theme = NUMBER_THEMES[generation_number]
+    personal_theme = NUMBER_THEMES[personal_year]
+
+    if life_path == attitude_number:
+        cross_insight = (
+            f"你的內在主軸與面對新情境的方式都偏向「{core['label']}」，"
+            "通常內外感受較一致；仍可留意不要把熟悉做法用在所有情境。"
+        )
+    else:
+        cross_insight = (
+            f"你的長期內在主軸偏向「{core['label']}」，"
+            f"但剛進入新情境時，會先展現「{attitude_theme['label']}」能量。"
+            "別人第一眼看見的你，可能和熟悉之後不完全相同。"
+        )
+
+    repeated_text = "、".join(
+        f"{item['number']}（{item['count']}次）" for item in repeated_numbers[:3]
+    )
+    if not repeated_text:
+        repeated_text = "分布平均，沒有特別集中的數字"
+
+    return {
+        "life_path": life_path,
+        "core_label": core["label"],
+        "core_emoji": core["emoji"],
+        "core_essence": core["essence"],
+        "core_strengths": list(core["strengths"]),
+        "core_blind_spot": core["blind_spot"],
+        "birthday_number": birthday_number,
+        "birthday_label": birthday_theme["label"],
+        "birthday_gift": birthday_theme["gift"],
+        "attitude_number": attitude_number,
+        "attitude_label": attitude_theme["label"],
+        "attitude_approach": attitude_theme["approach"],
+        "attitude_practice": attitude_theme["practice"],
+        "month_number": month_number,
+        "month_label": month_theme["label"],
+        "month_gift": month_theme["gift"],
+        "generation_number": generation_number,
+        "generation_label": generation_theme["label"],
+        "generation_gift": generation_theme["gift"],
+        "personal_year": personal_year,
+        "personal_year_label": personal_theme["label"],
+        "personal_year_focus": personal_theme["year_focus"],
+        "personal_year_action": personal_theme["year_action"],
+        "report_year": report_year,
+        "repeated_numbers": repeated_numbers,
+        "repeated_text": repeated_text,
+        "missing_numbers": missing_numbers,
+        "missing_themes": [
+            {
+                "number": number,
+                "label": NUMBER_THEMES[number]["label"],
+                "practice": NUMBER_THEMES[number]["practice"],
+            }
+            for number in missing_numbers
+        ],
+        "cross_insight": cross_insight,
+        "summary": (
+            f"你是 {life_path} 號{core['label']}；"
+            f"生日天賦帶有 {birthday_number} 號{birthday_theme['label']}，"
+            f"面對新情境時先展現 {attitude_number} 號{attitude_theme['label']}。"
+        ),
+        "next_action": personal_theme["year_action"],
+    }
 
 
 def _combined_animal_profile(dominant_values: list[int]) -> Dict[str, str]:

@@ -53,7 +53,7 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertEqual(len(app.exception), 0)
         self.assertEqual(app.session_state["quiz_id"], "birthday")
         markdown = "\n".join(element.value for element in app.markdown)
-        self.assertIn("生命靈數 × 人性動物原型", markdown)
+        self.assertIn("10 秒看見你的生命靈數", markdown)
         self.assertEqual(
             app.button(key="start_btn_mobile").label,
             "🚀 請先選完整生日",
@@ -65,14 +65,30 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         app.selectbox(key="birth_day_select_v2").set_value(29).run()
         self.assertEqual(
             app.button(key="start_btn_mobile").label,
-            "🚀 立即探索我的生命原型",
+            "🚀 立即看我的完整生命靈數",
         )
         self.assertFalse(app.button(key="start_btn_mobile").disabled)
         app.button(key="start_btn_mobile").click().run()
 
         self.assertEqual(len(app.exception), 0)
-        self.assertEqual(app.session_state["page"], "quiz")
+        self.assertEqual(app.session_state["page"], "life_path_result")
         self.assertEqual(app.session_state["life_path"], 6)
+        result_markdown = "\n".join(element.value for element in app.markdown)
+        result_code = "\n".join(element.value for element in app.code)
+        result_captions = "\n".join(element.value for element in app.caption)
+        self.assertIn("6 號・守護者", result_markdown)
+        self.assertIn("生日天賦｜2 號", result_markdown)
+        self.assertIn("外在態度｜5 號", result_markdown)
+        self.assertIn("個人年", result_markdown)
+        self.assertIn("不用做 20 題", result_captions)
+        self.assertNotIn("1990", result_markdown)
+        self.assertNotIn("1990", result_code)
+
+        app.button(key="start_humanity_btn_mobile").click().run()
+        self.assertEqual(len(app.exception), 0)
+        self.assertEqual(app.session_state["page"], "quiz")
+        self.assertEqual(app.session_state["step"], 1)
+        self.assertEqual(app.session_state["answers_map"], {})
 
     def test_three_entry_messages_render(self) -> None:
         expectations = {

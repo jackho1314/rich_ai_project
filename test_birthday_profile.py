@@ -1,6 +1,10 @@
 import unittest
 
-from birthday_profile import calculate_life_path, compute_humanity_report
+from birthday_profile import (
+    build_life_path_report,
+    calculate_life_path,
+    compute_humanity_report,
+)
 
 
 def answers_with_counts(*, tiger: int, dolphin: int, penguin: int, bee: int):
@@ -16,6 +20,32 @@ class HumanityProfileTest(unittest.TestCase):
     def test_life_path_validates_calendar_date(self):
         with self.assertRaises(ValueError):
             calculate_life_path(2023, 2, 29)
+
+    def test_full_life_path_report_cross_reads_the_birth_date(self):
+        report = build_life_path_report(1990, 12, 29, current_year=2026)
+
+        self.assertEqual(report["life_path"], 6)
+        self.assertEqual(report["birthday_number"], 2)
+        self.assertEqual(report["attitude_number"], 5)
+        self.assertEqual(report["month_number"], 3)
+        self.assertEqual(report["generation_number"], 1)
+        self.assertEqual(report["personal_year"], 6)
+        self.assertEqual(report["repeated_numbers"][0]["number"], 9)
+        self.assertEqual(report["repeated_numbers"][0]["count"], 3)
+        self.assertIn(3, report["missing_numbers"])
+
+    def test_full_life_path_report_does_not_return_raw_birth_date(self):
+        report = build_life_path_report(1990, 12, 29, current_year=2026)
+
+        for forbidden in (
+            "birth_year",
+            "birth_month",
+            "birth_day",
+            "year",
+            "month",
+            "day",
+        ):
+            self.assertNotIn(forbidden, report)
 
     def test_seven_is_standard_animal_type(self):
         report = compute_humanity_report(
