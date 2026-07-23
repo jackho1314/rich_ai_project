@@ -79,7 +79,7 @@ except Exception:
 # =========================
 st.set_page_config(page_title="2026 AI 風格診斷", page_icon="🤖", layout="centered")
 
-APP_VERSION = "growth-funnel-v3.2.1"
+APP_VERSION = "growth-funnel-v3.3.0"
 BIRTHDAY_QUIZ_VERSION = "2026LIFE2-HUM20-v1.0"
 WEALTH_QUIZ_VERSION = "2026Q1-10Q-v1.2"
 HEALTH_QUIZ_VERSION = "2026H1-10Q-v1.1"
@@ -424,7 +424,7 @@ BADGE_URL = "" if DEMO_MODE else drive_img(BADGE_FILE_ID, width=200)
 # =========================
 # 5) CSS（玻璃卡 + 多巴胺卡 + 黏著 CTA）
 # =========================
-CSS_VERSION = "2026-07-23-growth-v2.2.1"
+CSS_VERSION = "2026-07-23-growth-v2.3.0"
 
 st.markdown(
     f"""
@@ -650,6 +650,49 @@ pre, code{{
   margin-top:9px;
 }}
 
+/* Result sharing: make LINE an immediate action after copying. */
+.result-line-actions{{
+  margin:0.4rem 0 1.25rem;
+  padding:14px;
+  border-radius:18px;
+  border:1px solid rgba(6,199,85,0.34);
+  background:linear-gradient(135deg, rgba(6,199,85,0.12), rgba(255,255,255,0.04));
+  box-shadow:0 12px 30px rgba(0,0,0,0.20);
+}}
+.result-line-title{{
+  margin-bottom:10px;
+  color:rgba(255,255,255,0.82) !important;
+  font-size:0.92rem;
+  line-height:1.45;
+}}
+.result-line-buttons{{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}}
+.result-line-btn{{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height:48px;
+  padding:10px 12px;
+  border-radius:13px;
+  text-align:center;
+  text-decoration:none !important;
+  font-size:0.98rem;
+  font-weight:900;
+}}
+.result-line-btn.share{{
+  background:#06C755;
+  color:#fff !important;
+  box-shadow:0 10px 24px rgba(6,199,85,0.22);
+}}
+.result-line-btn.add{{
+  border:1px solid rgba(6,199,85,0.65);
+  background:rgba(255,255,255,0.04);
+  color:#8CF0B4 !important;
+}}
+
 /* Glass cards */
 .glass-card{{
   position:relative; overflow:hidden;
@@ -813,6 +856,9 @@ div[data-baseweb="popover"] li{{ color:#fff !important; background:transparent !
   }}
   .digital-card-btn{{
     min-height:50px !important;
+  }}
+  .result-line-buttons{{
+    grid-template-columns:1fr !important;
   }}
   .glass-card{{
     padding:13px 14px !important;
@@ -2431,6 +2477,39 @@ def render_copy_box(text: str, button_label: str, key: str):
     )
 
 
+def render_result_line_actions(share_text: str) -> None:
+    """Offer explicit LINE share and contact actions beside copied results."""
+    partner_name = str(partner.get("name", "")).strip() or "分享夥伴"
+    share_href = f"https://line.me/R/share?text={quote(str(share_text or ''), safe='')}"
+    contact_href = line_add_url()
+    contact_button = ""
+    if contact_href:
+        contact_button = (
+            f'<a class="result-line-btn add" href="{html_escape(contact_href)}" '
+            f'target="_blank" rel="noopener">＋ 加入{html_escape(partner_name)}的 LINE</a>'
+        )
+
+    st.markdown(
+        f"""
+        <div class="result-line-actions">
+          <div class="result-line-title">想直接分享？不必再貼上，選擇 LINE 好友即可傳送：</div>
+          <div class="result-line-buttons">
+            <a class="result-line-btn share" href="{html_escape(share_href)}"
+               target="_blank" rel="noopener">LINE 傳給朋友</a>
+            {contact_button}
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    track_event(
+        "result_line_actions_shown",
+        quiz_id=st.session_state.quiz_id,
+        meta={"contact_available": bool(contact_href)},
+        once_key=f"result_line_actions_shown|{st.session_state.quiz_id}",
+    )
+
+
 @st.cache_data(show_spinner=False)
 def make_digital_card_qr_png(target_url: str) -> bytes:
     """Create a print-ready QR code entirely in memory."""
@@ -2512,8 +2591,9 @@ def render_result_share_pack(result_title: str, result_summary: str):
         quiz_id=quiz_id,
         once_key=f"share_pack_viewed|{quiz_id}",
     )
+    render_result_line_actions(pack["line"])
     st.markdown("## 📣 分享我的結果")
-    st.caption("可以分享結果，也可以讓夥伴使用跟進文字繼續對話。")
+    st.caption("其他社群版本與夥伴跟進文字可在下方切換。")
     tabs = st.tabs(["LINE", "Instagram", "Facebook", "夥伴跟進"])
     for tab, platform, label in zip(
         tabs,

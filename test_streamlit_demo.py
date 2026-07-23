@@ -152,6 +152,9 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertIn("生命靈數 7 號", markdown)
         self.assertIn("完整解析", markdown)
         self.assertIn("我的生命原型", markdown)
+        self.assertIn("LINE 傳給朋友", markdown)
+        self.assertIn("＋ 加入侯閔議的 LINE", markdown)
+        self.assertIn("https://line.me/R/share?text=", markdown)
         self.assertNotIn("12 月 29", code)
         self.assertNotIn("1991", code)
         self.assertEqual(
