@@ -21,7 +21,7 @@
 ## 新增檔案
 
 - `growth_features.py`：入口文案、追蹤資料與分享包純函式。
-- `birthday_profile.py`：生命靈數、20 題人性動物題庫與純計分函式。
+- `humanity_profile.py`：生命靈數、20 題人性動物題庫與純計分函式；`birthday_profile.py` 保留舊匯入相容層。
 - `test_birthday_profile.py`：完整日期、一般／大類型、八爪、雙主型與隱私欄位測試。
 - `test_growth_features.py`：入口、事件與分享連結單元測試。
 - `test_streamlit_demo.py`：三種入口、答題、完整結果、分享包與安全留單流程測試。

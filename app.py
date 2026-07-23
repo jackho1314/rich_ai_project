@@ -39,7 +39,7 @@ from growth_features import (
     build_share_url,
     entry_copy,
 )
-from birthday_profile import (
+from humanity_profile import (
     ANIMAL_PROFILES,
     BIRTHDAY_CORES,
     HUMANITY_QUESTIONS,

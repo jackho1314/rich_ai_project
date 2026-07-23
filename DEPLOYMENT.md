@@ -99,7 +99,7 @@ http://127.0.0.1:8501/?ref=master&src=line&campaign=qa&entry=friend&quiz=birthda
 ## 6. 驗證
 
 ```bash
-python3 -m py_compile app.py birthday_profile.py growth_features.py
+python3 -m py_compile app.py humanity_profile.py birthday_profile.py growth_features.py
 RICH_DEMO_MODE=1 python3 -m unittest discover -v
 streamlit run app.py
 ```
