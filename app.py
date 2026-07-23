@@ -79,7 +79,7 @@ except Exception:
 # =========================
 st.set_page_config(page_title="2026 AI 風格診斷", page_icon="🤖", layout="centered")
 
-APP_VERSION = "growth-funnel-v3.2.0"
+APP_VERSION = "growth-funnel-v3.2.1"
 BIRTHDAY_QUIZ_VERSION = "2026LIFE2-HUM20-v1.0"
 WEALTH_QUIZ_VERSION = "2026Q1-10Q-v1.2"
 HEALTH_QUIZ_VERSION = "2026H1-10Q-v1.1"
@@ -424,7 +424,7 @@ BADGE_URL = "" if DEMO_MODE else drive_img(BADGE_FILE_ID, width=200)
 # =========================
 # 5) CSS（玻璃卡 + 多巴胺卡 + 黏著 CTA）
 # =========================
-CSS_VERSION = "2026-07-23-growth-v2.2.0"
+CSS_VERSION = "2026-07-23-growth-v2.2.1"
 
 st.markdown(
     f"""
@@ -441,6 +441,19 @@ body, .stApp{{ font-size:1rem !important; }}
 *{{ font-family:var(--font) !important; }}
 [data-testid="stIconMaterial"]{{
   font-family:"Material Symbols Rounded","Material Icons" !important;
+}}
+
+/* Present as a finished digital card, not a Streamlit developer workspace. */
+header[data-testid="stHeader"],
+[data-testid="stToolbar"],
+[data-testid="stDecoration"],
+[data-testid="stSidebarCollapsedControl"],
+#MainMenu,
+footer{{
+  display:none !important;
+}}
+[data-testid="stMainBlockContainer"]{{
+  padding-top:1.5rem !important;
 }}
 
 .stApp{{
@@ -776,7 +789,7 @@ div[data-baseweb="popover"] li{{ color:#fff !important; background:transparent !
 
 @media (max-width:640px){{
   [data-testid="stMainBlockContainer"]{{
-    padding:4rem 1rem 8rem !important;
+    padding:1.1rem 1rem 8rem !important;
   }}
   .hero-title{{
     font-size:1.72rem !important;
@@ -2326,7 +2339,7 @@ def render_digital_card_entry() -> None:
         line_button = (
             f'<a class="digital-card-btn {line_class}" '
             f'href="{html_escape(line_url)}" target="_blank" rel="noopener">'
-            f"＋ 加入 {html_escape(partner_name)} 的 LINE</a>"
+            "＋ 加入 LINE 保持聯絡</a>"
         )
         track_event(
             "digital_card_line_cta_shown",
@@ -2349,11 +2362,11 @@ def render_digital_card_entry() -> None:
     st.markdown(
         f"""
         <div class="digital-card-entry">
-          <div class="digital-card-kicker">DIGITAL BUSINESS CARD</div>
-          <div class="digital-card-title">一張名片，兩種認識方式</div>
-          <div class="digital-card-copy">先保存聯絡方式，或先用短測驗找到一個自然的開場話題。</div>
+          <div class="digital-card-kicker">{html_escape(partner_name)}的數位名片</div>
+          <div class="digital-card-title">選一個你方便的方式</div>
+          <div class="digital-card-copy">兩個功能都能直接使用，不需要先留下其他資料。</div>
           <div class="digital-card-actions">{actions}</div>
-          <div class="digital-card-note">加入 LINE 與測驗都由你自行選擇；測驗結果不設門檻。</div>
+          <div class="digital-card-note">不用註冊，結果直接看；是否加入 LINE 由你決定。</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -2898,12 +2911,13 @@ def page_intro():
             disabled=not birthday_ready,
         )
 
-    with st.container(key="mobile_start_cta"):
-        mobile_start_clicked = st.button(
-            f"🚀 {start_display_label}",
-            key="start_btn_mobile",
-            disabled=not birthday_ready,
-        )
+    mobile_start_clicked = False
+    if birthday_ready:
+        with st.container(key="mobile_start_cta"):
+            mobile_start_clicked = st.button(
+                f"🚀 {start_display_label}",
+                key="start_btn_mobile",
+            )
 
     if inline_start_clicked or mobile_start_clicked:
         begin_quiz(name, state_final, birth_year, birth_month, birth_day)

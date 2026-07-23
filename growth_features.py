@@ -67,8 +67,8 @@ def entry_copy(context: AcquisitionContext, partner_name: str) -> Dict[str, str]
         }
     return {
         "eyebrow": f"{partner} 的數位名片",
-        "title": "先保存聯絡方式，再用 10 秒認識自己",
-        "subtitle": "可以直接加入 LINE，也可以先看完整生命靈數；兩個入口都由你決定。",
+        "title": "很高興認識你",
+        "subtitle": "你可以加入 LINE 保持聯絡，也可以玩個 10 秒小測驗，看看自己的生命靈數。",
         "partner_kicker": "這張數位名片的主人",
         "start_label": "開始 2 分鐘探索",
     }
