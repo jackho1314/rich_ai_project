@@ -92,6 +92,12 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertIn("不用做 20 題", result_captions)
         self.assertNotIn("1990", result_markdown)
         self.assertNotIn("1990", result_code)
+        self.assertTrue(
+            any(
+                str(key).startswith("life_path|")
+                for key in app.session_state["auto_notified_results"]
+            )
+        )
 
         app.button(key="start_humanity_btn_mobile").click().run()
         self.assertEqual(len(app.exception), 0)
@@ -171,6 +177,12 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
             "同意儲存結果並通知分享夥伴",
             [button.label for button in app.button],
         )
+        self.assertTrue(
+            any(
+                str(key).startswith("humanity|")
+                for key in app.session_state["auto_notified_results"]
+            )
+        )
 
     def test_birthday_quiz_requires_an_explicit_answer(self) -> None:
         app = make_app(quiz="birthday")
@@ -208,6 +220,12 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
             "同意儲存結果並通知分享夥伴",
             [button.label for button in app.button],
         )
+        self.assertTrue(
+            any(
+                str(key).startswith("wealth|")
+                for key in app.session_state["auto_notified_results"]
+            )
+        )
 
     def test_demo_opt_in_never_writes_to_production(self) -> None:
         app = make_app(quiz="wealth")
@@ -233,6 +251,12 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertEqual(
             [tab.label for tab in app.tabs],
             ["LINE", "Instagram", "Facebook"],
+        )
+        self.assertTrue(
+            any(
+                str(key).startswith("health|")
+                for key in app.session_state["auto_notified_results"]
+            )
         )
 
 

@@ -81,7 +81,7 @@ except Exception:
 # =========================
 st.set_page_config(page_title="2026 AI 風格診斷", page_icon="🤖", layout="centered")
 
-APP_VERSION = "growth-funnel-v3.5.0"
+APP_VERSION = "growth-funnel-v3.6.0"
 BIRTHDAY_QUIZ_VERSION = "2026LIFE2-HUM20-v1.0"
 WEALTH_QUIZ_VERSION = "2026Q1-10Q-v1.2"
 HEALTH_QUIZ_VERSION = "2026H1-10Q-v1.1"
@@ -1265,6 +1265,8 @@ if "session_id" not in st.session_state:
     st.session_state.session_id = uuid.uuid4().hex[:20]
 if "tracked_events" not in st.session_state:
     st.session_state.tracked_events = set()
+if "auto_notified_results" not in st.session_state:
+    st.session_state.auto_notified_results = set()
 
 
 def track_event(
@@ -1325,6 +1327,7 @@ def reset_all(keep_profile: bool = True):
     st.session_state.tracked_events = {
         key for key in st.session_state.tracked_events if key == "page_opened"
     }
+    st.session_state.auto_notified_results = set()
     if not keep_profile:
         st.session_state.u_name = ""
         st.session_state.u_state = ""
@@ -1967,20 +1970,107 @@ def build_health_answers_payload(answers_map: dict, meta: Optional[Dict] = None,
 # =========================
 # 12) LINE Push（推播）
 # =========================
-def push_line(token: str, to_id: str, text: str):
+def push_line(token: str, to_id: str, text: str) -> bool:
     if DEMO_MODE:
-        return
+        return True
     if not token or not to_id:
-        return
+        return False
     try:
-        requests.post(
+        response = requests.post(
             "https://api.line.me/v2/bot/message/push",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
             json={"to": to_id, "messages": [{"type": "text", "text": text}]},
             timeout=8,
         )
+        return 200 <= int(response.status_code) < 300
     except Exception:
-        pass
+        return False
+
+
+def line_notification_destinations() -> List[Tuple[str, str]]:
+    """Return unique master/partner LINE push destinations without exposing them."""
+    line_cfg = secret_value("line", default={}) or {}
+    candidates = [
+        (
+            str(
+                line_cfg.get("channel_access_token")
+                or secret_value("LINE_CHANNEL_ACCESS_TOKEN", default="")
+            ).strip(),
+            str(
+                line_cfg.get("user_id")
+                or secret_value("LINE_USER_ID", default="")
+            ).strip(),
+        ),
+        (
+            str(partner.get("line_token") or "").strip(),
+            str(partner.get("line_id") or "").strip(),
+        ),
+    ]
+    unique = []
+    seen = set()
+    for token, to_id in candidates:
+        destination = (token, to_id)
+        if not token or not to_id or destination in seen:
+            continue
+        seen.add(destination)
+        unique.append(destination)
+    return unique
+
+
+def auto_notify_result(
+    *,
+    notification_key: str,
+    quiz_id: str,
+    title: str,
+    detail_lines: List[str],
+) -> bool:
+    """Push one privacy-minimized result summary per completed test run."""
+    key = str(notification_key or "").strip()
+    if not key or key in st.session_state.auto_notified_results:
+        return False
+
+    # Mark before network I/O so a Streamlit rerun cannot duplicate the push.
+    st.session_state.auto_notified_results.add(key)
+    owner_name = str(partner.get("name", "")).strip() or "數位名片主人"
+    visitor_name = str(st.session_state.u_name or "").strip() or "匿名訪客"
+    source = str(ACQUISITION.source or "direct").strip()
+    campaign = str(ACQUISITION.campaign or "-").strip()
+    ref_resolved = str(partner.get("ref", "")).strip()
+    details = "\n".join(
+        f"• {str(line).strip()}"
+        for line in detail_lines
+        if str(line or "").strip()
+    )
+    message = (
+        "🔔 有人完成數位名片測驗\n"
+        f"🧑‍💼 名片主人：{owner_name}\n"
+        f"🧪 測驗：{quiz_id}\n"
+        f"👤 受測者：{visitor_name}\n"
+        f"✨ 結果：{title}\n"
+        f"{details}\n"
+        f"📍 來源：{source} / {campaign}\n"
+        f"🔁 ref：{ref_resolved}\n"
+        "🔒 本通知不含完整生日與逐題作答"
+    )
+
+    destinations = line_notification_destinations()
+    delivered = False
+    if DEMO_MODE:
+        delivered = push_line("demo-token", "demo-user", message)
+    else:
+        for token, to_id in destinations:
+            delivered = push_line(token, to_id, message) or delivered
+
+    track_event(
+        "result_line_notified",
+        quiz_id=quiz_id,
+        meta={
+            "delivered": delivered,
+            "destination_count": len(destinations),
+        },
+        once_key=f"result_line_notified|{key}",
+    )
+    return delivered
 
 
 LEADS_COLS = [
@@ -3258,6 +3348,19 @@ def page_life_path_result():
         },
         once_key="life_path_result_viewed|birthday",
     )
+    auto_notify_result(
+        notification_key=(
+            f"life_path|{report['life_path']}|{report['birthday_number']}|"
+            f"{report['attitude_number']}|{report['personal_year']}"
+        ),
+        quiz_id="10 秒生命靈數",
+        title=f"{report['life_path']} 號・{report['core_label']}",
+        detail_lines=[
+            f"生日天賦：{report['birthday_number']} 號・{report['birthday_label']}",
+            f"外在態度：{report['attitude_number']} 號・{report['attitude_label']}",
+            f"{report['report_year']} 主題：{report['personal_year']} 號・{report['personal_year_focus']}",
+        ],
+    )
 
     display_name = (
         "你的"
@@ -3707,6 +3810,18 @@ def page_result():
             },
             once_key="result_viewed|birthday",
         )
+        auto_notify_result(
+            notification_key=(
+                f"humanity|{report['life_path']}|{report['primary']}|"
+                f"{report['secondary']}|{report['animal_intensity']}"
+            ),
+            quiz_id="進階人性探索",
+            title=str(report["combined_title"]),
+            detail_lines=[
+                f"生命靈數：{report['life_path']} 號・{report['core_label']}",
+                f"團隊風格：{report['animal_title']}",
+            ],
+        )
 
         st.markdown(
             f"### {report['core_emoji']}{report['animal_emoji']} 你的生命原型：**{report['combined_title']}**"
@@ -3822,6 +3937,15 @@ def page_result():
             meta={"primary": primary, "secondary": secondary},
             once_key="result_viewed|wealth",
         )
+        auto_notify_result(
+            notification_key=f"wealth|{primary}|{secondary}|{persona_name}",
+            quiz_id="財富與行動風格",
+            title=persona_name,
+            detail_lines=[
+                f"目前狀態：{str(st.session_state.u_state or '未填寫')}",
+                f"主要風格：{TYPE_SHORT.get(primary, primary)}",
+            ],
+        )
         st.markdown(f"### ✅ 類型：**{persona_name}**")
         st.markdown("#### 📊 四力分析雷達圖")
         render_radar_chart_wealth(st.session_state.answers_map)
@@ -3902,6 +4026,15 @@ def page_result():
             quiz_id="health",
             meta={"band": band, "top_section": top_sec},
             once_key="result_viewed|health",
+        )
+        auto_notify_result(
+            notification_key=f"health|{band}|{total_score}|{top_sec}",
+            quiz_id="健康節奏對帳",
+            title=f"{band}（{total_score}/{max_score}）",
+            detail_lines=[
+                f"最高分關卡：{top_sec}",
+                f"結果摘要：{painpoint}",
+            ],
         )
         st.markdown(f"### ✅ 結果：**{band}**（{total_score}/{max_score}）")
         st.progress(min(total_score / max(max_score, 1), 1.0))
