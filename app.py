@@ -81,7 +81,7 @@ except Exception:
 # =========================
 st.set_page_config(page_title="2026 AI 風格診斷", page_icon="🤖", layout="centered")
 
-APP_VERSION = "growth-funnel-v3.6.0"
+APP_VERSION = "growth-funnel-v3.7.0"
 BIRTHDAY_QUIZ_VERSION = "2026LIFE2-HUM20-v1.0"
 WEALTH_QUIZ_VERSION = "2026Q1-10Q-v1.2"
 HEALTH_QUIZ_VERSION = "2026H1-10Q-v1.1"
@@ -1561,7 +1561,7 @@ def quiz_card_copy(quiz_id: str) -> Dict[str, str]:
         "birthday": {
             "icon": "🔮",
             "title": quiz_label("birthday"),
-            "desc": "輸入完整生日，先看生命路徑、生日天賦、外在態度與今年主題。想更深入了解自己，再進入 20 題人性探索。",
+            "desc": "輸入完整生日，先看一個主要類型、兩個補充觀察與今年主題。想更深入了解自己，再進入 20 題人性探索。",
         },
         "wealth": {
             "icon": "🚀",
@@ -2415,17 +2415,10 @@ def build_line_share_text_life_path(
                 f"✨ 生命路徑：{report.get('life_path', '')}號 "
                 f"{report.get('core_emoji', '')}{report.get('core_label', '')}"
             ),
-            (
-                f"💎 生日天賦：{report.get('birthday_number', '')}號 "
-                f"{report.get('birthday_label', '')}"
-            ),
-            (
-                f"👀 外在態度：{report.get('attitude_number', '')}號 "
-                f"{report.get('attitude_label', '')}"
-            ),
+            f"💎 天生強項：{report.get('birthday_label', '')}",
+            f"👀 第一印象：{report.get('attitude_label', '')}",
             (
                 f"🗓️ {report.get('report_year', '')} 主題："
-                f"{report.get('personal_year', '')}號 "
                 f"{report.get('personal_year_focus', '')}"
             ),
             "—",
@@ -2454,14 +2447,8 @@ def build_line_share_text_birthday(
             f"🔢 生命靈數：{report.get('life_path','')}號 "
             f"{report.get('core_emoji','')} {report.get('core_label','')}"
         ),
-        (
-            f"💎 生日天賦：{report.get('birthday_number','')}號 "
-            f"{report.get('birthday_label','')}"
-        ),
-        (
-            f"👀 外在態度：{report.get('attitude_number','')}號 "
-            f"{report.get('attitude_label','')}"
-        ),
+        f"💎 天生強項：{report.get('birthday_label','')}",
+        f"👀 第一印象：{report.get('attitude_label','')}",
         f"🐾 團隊溝通風格：{report.get('animal_emoji','')} {report.get('animal_title','')}",
         "—",
         f"💬 {report.get('summary','')}",
@@ -3153,7 +3140,7 @@ def page_intro():
               <div class="dopa-icon">🔮</div>
               <div class="dopa-title">10 秒看見你的生命靈數</div>
               <div class="dopa-badge">本月主打｜先看結果，不用答題</div>
-              <div class="dopa-desc">完整生日一次看生命路徑、生日天賦、外在態度、數字分布與今年主題。想更深入了解自己，再進入 20 題人性探索。</div>
+              <div class="dopa-desc">完整生日先看一個主要類型，再用兩個白話角度補充。想更深入了解自己，再進入 20 題人性探索。</div>
               <div class="privacy-note">完整生日只用於當次計算；結果免註冊、直接看。</div>
             </div>
             """,
@@ -3356,9 +3343,9 @@ def page_life_path_result():
         quiz_id="10 秒生命靈數",
         title=f"{report['life_path']} 號・{report['core_label']}",
         detail_lines=[
-            f"生日天賦：{report['birthday_number']} 號・{report['birthday_label']}",
-            f"外在態度：{report['attitude_number']} 號・{report['attitude_label']}",
-            f"{report['report_year']} 主題：{report['personal_year']} 號・{report['personal_year_focus']}",
+            f"天生強項：{report['birthday_label']}",
+            f"第一印象：{report['attitude_label']}",
+            f"{report['report_year']} 主題：{report['personal_year_focus']}",
         ],
     )
 
@@ -3368,7 +3355,7 @@ def page_life_path_result():
         else f"{html_escape(st.session_state.u_name)} 的"
     )
     st.markdown(
-        f'<div class="hero-title">{display_name}完整生命靈數</div>',
+        f'<div class="hero-title">{display_name}生命主數</div>',
         unsafe_allow_html=True,
     )
     st.caption("第一階段結果已完整顯示，不用做 20 題，也不用先留下聯絡資料。")
@@ -3376,21 +3363,25 @@ def page_life_path_result():
     st.markdown(
         f"## {report['core_emoji']} {report['life_path']} 號・{report['core_label']}"
     )
+    st.caption(
+        f"先記住這一個就好：{report['life_path']} 號・{report['core_label']}是你的主要結果；"
+        "下面兩項只是補充觀察，不是另外兩個人格類型。"
+    )
     st.write(report["core_essence"])
     strength_text = "、".join(report["core_strengths"])
     st.markdown(f"**核心優勢：** {strength_text}")
     st.markdown(f"**容易忽略：** {report['core_blind_spot']}")
 
-    st.markdown("### 🧩 四組生日數字交叉解讀")
+    st.markdown("### 🧩 兩個補充觀察")
     st.markdown(
         f"""
         <div class="glass-card">
-          <div class="glass-title">💎 生日天賦｜{report["birthday_number"]} 號・{html_escape(report["birthday_label"])}</div>
+          <div class="glass-title">💎 天生強項｜{html_escape(report["birthday_label"])}</div>
           <div class="glass-body">{html_escape(report["birthday_gift"])}</div>
-          <div class="glass-hint">這組數字用來提醒你較容易上手、可以主動運用的能力。</div>
+          <div class="glass-hint">代表你較容易上手、可以主動運用的能力。</div>
         </div>
         <div class="glass-card">
-          <div class="glass-title">👀 外在態度｜{report["attitude_number"]} 號・{html_escape(report["attitude_label"])}</div>
+          <div class="glass-title">👀 第一印象｜{html_escape(report["attitude_label"])}</div>
           <div class="glass-body">{html_escape(report["attitude_approach"])}</div>
           <div class="glass-hint">{html_escape(report["attitude_practice"])}</div>
         </div>
@@ -3400,8 +3391,8 @@ def page_life_path_result():
     st.info(report["cross_insight"])
 
     st.markdown(
-        f"### 🗓️ {report['report_year']} 個人年｜"
-        f"{report['personal_year']} 號・{report['personal_year_focus']}"
+        f"### 🗓️ {report['report_year']} 今年主題｜"
+        f"{report['personal_year_focus']}"
     )
     st.write(
         "這是依出生月日與今年年份推導的年度提醒，"
@@ -3417,7 +3408,52 @@ def page_life_path_result():
         unsafe_allow_html=True,
     )
 
-    with st.expander("看完整數字分布與待練習方向", expanded=False):
+    birth_digit_total = sum(
+        int(char)
+        for char in (
+            f"{int(st.session_state.birth_year):04d}"
+            f"{int(st.session_state.birth_month):02d}"
+            f"{int(st.session_state.birth_day):02d}"
+        )
+    )
+
+    def reduction_trace(value: int) -> str:
+        current = int(value)
+        parts = [str(current)]
+        while current > 9:
+            equation = "＋".join(str(current))
+            current = sum(int(char) for char in str(current))
+            parts.append(f"{equation}＝{current}")
+        return " → ".join(parts)
+
+    with st.expander("這些結果怎麼來的？", expanded=False):
+        st.markdown(
+            f"""
+            **只有最上面的「{report['life_path']} 號・{report['core_label']}」是主要類型。**
+
+            - **主要類型｜{report['life_path']} 號・{report['core_label']}**<br>
+              完整出生年月日的每一位數字相加，再化簡成 1–9。<br>
+              你的計算：{reduction_trace(birth_digit_total)}
+
+            - **天生強項｜{report['birthday_label']}（計算值 {report['birthday_number']}）**<br>
+              由「出生日」化簡，代表比較容易上手的能力。<br>
+              你的計算：{reduction_trace(int(st.session_state.birth_day))}
+
+            - **第一印象｜{report['attitude_label']}（計算值 {report['attitude_number']}）**<br>
+              由「出生月份＋出生日」化簡，代表剛進入新環境時常先展現的反應。<br>
+              你的計算：{reduction_trace(int(st.session_state.birth_month) + int(st.session_state.birth_day))}
+
+            - **{report['report_year']} 年度主題｜{report['personal_year_focus']}（計算值 {report['personal_year']}）**<br>
+              由出生月日加上當年年份後化簡，只作為今年的自我提醒。<br>
+              你的計算：{reduction_trace(int(st.session_state.birth_month) + int(st.session_state.birth_day) + int(report['report_year']))}
+            """
+        )
+        st.caption(
+            "你可以這樣向朋友解釋：最上面的數字是主類型；"
+            "其他數字只是從生日不同部分算出的補充角度。"
+        )
+
+    with st.expander("想再深入：數字分布與練習方向", expanded=False):
         st.markdown(
             f"**出生月份能量：** {report['month_number']} 號・"
             f"{report['month_label']}（{report['month_gift']}）"
@@ -3830,18 +3866,17 @@ def page_result():
             f"**內在動力：生命靈數 {report['life_path']} 號・{report['core_label']}**"
         )
         st.markdown(
-            f"**生日天賦：{report['birthday_number']} 號・{report['birthday_label']}**"
+            f"**天生強項：{report['birthday_label']}**"
             f"｜{report['birthday_gift']}"
         )
         st.markdown(
-            f"**外在態度：{report['attitude_number']} 號・{report['attitude_label']}**"
+            f"**第一印象：{report['attitude_label']}**"
         )
         st.markdown(f"**外在／團隊風格：{report['animal_title']}**")
         st.write(report["summary"])
         st.info(report["cross_insight"])
         st.markdown(
-            f"**{report['report_year']} 個人年：{report['personal_year']} 號・"
-            f"{report['personal_year_focus']}**"
+            f"**{report['report_year']} 個人主題：{report['personal_year_focus']}**"
         )
         st.caption("完整生日不會出現在事件追蹤、名單或分享文字；只使用不含原始日期的推導數字。")
 

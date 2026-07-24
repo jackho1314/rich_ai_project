@@ -554,8 +554,8 @@ def build_life_path_report(
         "cross_insight": cross_insight,
         "summary": (
             f"你是 {life_path} 號{core['label']}；"
-            f"生日天賦帶有 {birthday_number} 號{birthday_theme['label']}，"
-            f"面對新情境時先展現 {attitude_number} 號{attitude_theme['label']}。"
+            f"天生強項偏向{birthday_theme['label']}，"
+            f"面對新情境時常先展現{attitude_theme['label']}特質。"
         ),
         "next_action": personal_theme["year_action"],
     }
