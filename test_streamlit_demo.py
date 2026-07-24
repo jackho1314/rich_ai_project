@@ -91,6 +91,7 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertIn("只有最上面的「6 號・守護者」是主要類型", result_markdown)
         self.assertIn("計算值 2", result_markdown)
         self.assertIn("計算值 5", result_markdown)
+        self.assertNotIn("<br>", result_markdown)
         self.assertNotIn("生日天賦｜2 號", result_markdown)
         self.assertNotIn("外在態度｜5 號", result_markdown)
         self.assertIn("今年主題", result_markdown)

@@ -81,7 +81,7 @@ except Exception:
 # =========================
 st.set_page_config(page_title="2026 AI 風格診斷", page_icon="🤖", layout="centered")
 
-APP_VERSION = "growth-funnel-v3.7.0"
+APP_VERSION = "growth-funnel-v3.7.1"
 BIRTHDAY_QUIZ_VERSION = "2026LIFE2-HUM20-v1.0"
 WEALTH_QUIZ_VERSION = "2026Q1-10Q-v1.2"
 HEALTH_QUIZ_VERSION = "2026H1-10Q-v1.1"
@@ -437,7 +437,7 @@ BADGE_URL = local_image_data_uri(str(RICH_TEAM_LOGO_PATH))
 # =========================
 # 5) CSS（玻璃卡 + 多巴胺卡 + 黏著 CTA）
 # =========================
-CSS_VERSION = "2026-07-24-growth-v2.5.0"
+CSS_VERSION = "2026-07-24-growth-v2.6.0"
 
 st.markdown(
     f"""
@@ -808,6 +808,55 @@ pre, code{{
 .glass-title{{ font-size:1.06rem; font-weight:1000; margin-bottom:8px; }}
 .glass-body{{ color:rgba(255,255,255,0.86) !important; font-size:1rem; line-height:1.6; white-space:pre-wrap; }}
 .glass-hint{{ margin-top:10px; color:rgba(255,255,255,0.62) !important; font-size:0.92rem; }}
+
+/* Keep Streamlit expanders dark after touch, hover, focus and expansion. */
+[data-testid="stExpander"] details > summary,
+[data-testid="stExpander"] details > summary:hover,
+[data-testid="stExpander"] details > summary:focus,
+[data-testid="stExpander"] details > summary:focus-visible,
+[data-testid="stExpander"] details > summary:active{{
+  background:rgba(255,255,255,0.045) !important;
+  color:#F7F5F1 !important;
+  outline:none !important;
+  box-shadow:none !important;
+  -webkit-tap-highlight-color:transparent !important;
+  user-select:none;
+}}
+[data-testid="stExpander"] details[open] > summary,
+[data-testid="stExpander"] details[open] > summary:hover,
+[data-testid="stExpander"] details[open] > summary:focus{{
+  background:rgba(214,177,111,0.09) !important;
+  color:#FFF7E8 !important;
+}}
+[data-testid="stExpander"] details > summary *{{
+  color:inherit !important;
+}}
+.calculation-item{{
+  margin:10px 0;
+  padding:13px 14px;
+  border:1px solid rgba(255,255,255,0.10);
+  border-radius:14px;
+  background:rgba(255,255,255,0.035);
+}}
+.calculation-title{{
+  color:#F7F5F1 !important;
+  font-size:0.98rem;
+  font-weight:900;
+  line-height:1.45;
+}}
+.calculation-desc{{
+  margin-top:5px;
+  color:rgba(255,255,255,0.70) !important;
+  font-size:0.88rem;
+  line-height:1.55;
+}}
+.calculation-formula{{
+  margin-top:7px;
+  color:#E6C98D !important;
+  font-size:0.88rem;
+  font-weight:800;
+  line-height:1.45;
+}}
 
 /* Refined first-step card: quieter hierarchy and fewer decorative borders. */
 .discovery-heading{{
@@ -3426,27 +3475,52 @@ def page_life_path_result():
             parts.append(f"{equation}＝{current}")
         return " → ".join(parts)
 
-    with st.expander("這些結果怎麼來的？", expanded=False):
+    def render_calculation_item(title: str, description: str, formula: str) -> None:
         st.markdown(
             f"""
-            **只有最上面的「{report['life_path']} 號・{report['core_label']}」是主要類型。**
+            <div class="calculation-item">
+              <div class="calculation-title">{html_escape(title)}</div>
+              <div class="calculation-desc">{html_escape(description)}</div>
+              <div class="calculation-formula">你的計算：{html_escape(formula)}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-            - **主要類型｜{report['life_path']} 號・{report['core_label']}**<br>
-              完整出生年月日的每一位數字相加，再化簡成 1–9。<br>
-              你的計算：{reduction_trace(birth_digit_total)}
-
-            - **天生強項｜{report['birthday_label']}（計算值 {report['birthday_number']}）**<br>
-              由「出生日」化簡，代表比較容易上手的能力。<br>
-              你的計算：{reduction_trace(int(st.session_state.birth_day))}
-
-            - **第一印象｜{report['attitude_label']}（計算值 {report['attitude_number']}）**<br>
-              由「出生月份＋出生日」化簡，代表剛進入新環境時常先展現的反應。<br>
-              你的計算：{reduction_trace(int(st.session_state.birth_month) + int(st.session_state.birth_day))}
-
-            - **{report['report_year']} 年度主題｜{report['personal_year_focus']}（計算值 {report['personal_year']}）**<br>
-              由出生月日加上當年年份後化簡，只作為今年的自我提醒。<br>
-              你的計算：{reduction_trace(int(st.session_state.birth_month) + int(st.session_state.birth_day) + int(report['report_year']))}
-            """
+    with st.expander("這些結果怎麼來的？", expanded=False):
+        st.markdown(
+            f"**只有最上面的「{report['life_path']} 號・"
+            f"{report['core_label']}」是主要類型。**"
+        )
+        render_calculation_item(
+            f"主要類型｜{report['life_path']} 號・{report['core_label']}",
+            "完整出生年月日的每一位數字相加，再化簡成 1–9。",
+            reduction_trace(birth_digit_total),
+        )
+        render_calculation_item(
+            f"天生強項｜{report['birthday_label']}（計算值 {report['birthday_number']}）",
+            "由「出生日」化簡，代表比較容易上手的能力。",
+            reduction_trace(int(st.session_state.birth_day)),
+        )
+        render_calculation_item(
+            f"第一印象｜{report['attitude_label']}（計算值 {report['attitude_number']}）",
+            "由「出生月份＋出生日」化簡，代表剛進入新環境時常先展現的反應。",
+            reduction_trace(
+                int(st.session_state.birth_month)
+                + int(st.session_state.birth_day)
+            ),
+        )
+        render_calculation_item(
+            (
+                f"{report['report_year']} 年度主題｜"
+                f"{report['personal_year_focus']}（計算值 {report['personal_year']}）"
+            ),
+            "由出生月日加上當年年份後化簡，只作為今年的自我提醒。",
+            reduction_trace(
+                int(st.session_state.birth_month)
+                + int(st.session_state.birth_day)
+                + int(report["report_year"])
+            ),
         )
         st.caption(
             "你可以這樣向朋友解釋：最上面的數字是主類型；"
