@@ -58,6 +58,9 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertIn("選一個你方便的方式", markdown)
         self.assertNotIn("自然的開場話題", markdown)
         self.assertIn("10 秒看見你的生命靈數", markdown)
+        self.assertIn("想更深入了解自己，再進入 20 題人性探索", markdown)
+        captions = "\n".join(element.value for element in app.caption)
+        self.assertNotIn("只有主動同意才會建立後續名單", captions)
         self.assertNotIn(
             "🚀 請先選完整生日",
             [button.label for button in app.button],

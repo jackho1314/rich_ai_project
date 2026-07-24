@@ -79,7 +79,7 @@ except Exception:
 # =========================
 st.set_page_config(page_title="2026 AI 風格診斷", page_icon="🤖", layout="centered")
 
-APP_VERSION = "growth-funnel-v3.3.0"
+APP_VERSION = "growth-funnel-v3.4.0"
 BIRTHDAY_QUIZ_VERSION = "2026LIFE2-HUM20-v1.0"
 WEALTH_QUIZ_VERSION = "2026Q1-10Q-v1.2"
 HEALTH_QUIZ_VERSION = "2026H1-10Q-v1.1"
@@ -424,15 +424,15 @@ BADGE_URL = "" if DEMO_MODE else drive_img(BADGE_FILE_ID, width=200)
 # =========================
 # 5) CSS（玻璃卡 + 多巴胺卡 + 黏著 CTA）
 # =========================
-CSS_VERSION = "2026-07-23-growth-v2.3.0"
+CSS_VERSION = "2026-07-24-growth-v2.4.0"
 
 st.markdown(
     f"""
 <style>
 /* CSS_VERSION:{CSS_VERSION} */
 :root{{
-  --bg0:#0B0B10; --bg2:#1B1B28; --gold:#FFD700; --green:#06C755;
-  --muted:#B8B8C6; --accent:#D3544E; --accent2:#FF4B4B;
+  --bg0:#0B0C10; --bg2:#17151B; --gold:#D6B16F; --green:#06C755;
+  --muted:#B8B8C6; --accent:#B94C4C; --accent2:#D96156;
   --font:'Microsoft JhengHei', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   --form-bg:#141423; --form-bg-2:#0E0E15; --form-border:rgba(255,255,255,0.16);
 }}
@@ -458,8 +458,8 @@ footer{{
 
 .stApp{{
   background:
-    radial-gradient(1200px 600px at 70% 15%, rgba(255,215,0,0.10), transparent 60%),
-    radial-gradient(900px 500px at 20% 30%, rgba(255,75,75,0.10), transparent 60%),
+    radial-gradient(1100px 620px at 72% 8%, rgba(214,177,111,0.11), transparent 62%),
+    radial-gradient(850px 520px at 10% 34%, rgba(6,199,85,0.045), transparent 62%),
     linear-gradient(135deg, var(--bg0), var(--bg2));
   padding-bottom:110px;
 }}
@@ -493,7 +493,12 @@ p, li{{ line-height:1.55 !important; }}
 .stApp div[data-baseweb="select"] * {{ color:#fff !important; -webkit-text-fill-color:#fff !important; }}
 
 /* Progress */
-.stProgress > div > div > div > div{{ background:linear-gradient(90deg, var(--accent), var(--accent2)); }}
+.stProgress > div > div {{
+  background:rgba(255,255,255,0.08) !important;
+}}
+.stProgress > div > div > div > div{{
+  background:linear-gradient(90deg, #C79A59, #E1C184);
+}}
 
 /* Buttons */
 div.stButton > button{{
@@ -706,6 +711,87 @@ pre, code{{
 .glass-body{{ color:rgba(255,255,255,0.86) !important; font-size:1rem; line-height:1.6; white-space:pre-wrap; }}
 .glass-hint{{ margin-top:10px; color:rgba(255,255,255,0.62) !important; font-size:0.92rem; }}
 
+/* Refined first-step card: quieter hierarchy and fewer decorative borders. */
+.discovery-heading{{
+  margin:0.25rem 0 0.85rem;
+}}
+.discovery-kicker{{
+  color:#CDB27E !important;
+  font-size:0.72rem;
+  font-weight:900;
+  letter-spacing:0.16em;
+  text-transform:uppercase;
+}}
+.discovery-title{{
+  margin-top:5px;
+  color:#F7F5F1 !important;
+  font-size:1.45rem;
+  font-weight:950;
+  line-height:1.3;
+}}
+.entry-quiz-card{{
+  position:relative;
+  overflow:hidden;
+  margin:0 0 1rem;
+  padding:17px;
+  border:1px solid rgba(255,255,255,0.11);
+  border-radius:20px;
+  background:
+    radial-gradient(420px 180px at 0% 0%, rgba(214,177,111,0.12), transparent 64%),
+    rgba(255,255,255,0.042);
+  box-shadow:0 16px 42px rgba(0,0,0,0.22);
+}}
+.entry-quiz-head{{
+  display:flex;
+  align-items:center;
+  gap:11px;
+}}
+.entry-quiz-icon{{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:42px;
+  height:42px;
+  flex:0 0 42px;
+  border-radius:13px;
+  background:rgba(214,177,111,0.12);
+  border:1px solid rgba(214,177,111,0.2);
+  font-size:1.45rem;
+}}
+.entry-quiz-eyebrow{{
+  color:#CDB27E !important;
+  font-size:0.7rem;
+  font-weight:900;
+  letter-spacing:0.11em;
+}}
+.entry-quiz-title{{
+  margin-top:2px;
+  color:#FAF8F4 !important;
+  font-size:1.18rem;
+  font-weight:950;
+}}
+.entry-quiz-desc{{
+  margin-top:13px;
+  color:rgba(255,255,255,0.76) !important;
+  font-size:0.94rem;
+  line-height:1.58;
+}}
+.entry-quiz-meta{{
+  display:flex;
+  flex-wrap:wrap;
+  gap:7px;
+  margin-top:13px;
+}}
+.entry-quiz-meta span{{
+  padding:5px 9px;
+  border-radius:999px;
+  background:rgba(255,255,255,0.055);
+  border:1px solid rgba(255,255,255,0.08);
+  color:rgba(255,255,255,0.63) !important;
+  font-size:0.72rem;
+  font-weight:800;
+}}
+
 /* Hero */
 .hero-title{{ font-size:2.1rem; font-weight:1000; margin:6px 0 2px 0; }}
 .hero-subtitle{{ font-size:1.05rem; color:rgba(255,255,255,0.78) !important; margin:0 0 8px 0; }}
@@ -831,8 +917,9 @@ div[data-baseweb="popover"] [role="option"],
 div[data-baseweb="popover"] li{{ color:#fff !important; background:transparent !important; }}
 
 @media (max-width:640px){{
+  html{{ font-size:16px !important; }}
   [data-testid="stMainBlockContainer"]{{
-    padding:1.1rem 1rem 8rem !important;
+    padding:1rem 1rem 8rem !important;
   }}
   .hero-title{{
     font-size:1.72rem !important;
@@ -865,6 +952,20 @@ div[data-baseweb="popover"] li{{ color:#fff !important; background:transparent !
     margin:6px 0 8px 0 !important;
   }}
   .glass-hint{{ display:none !important; }}
+  .discovery-heading{{
+    margin:0.1rem 0 0.7rem !important;
+  }}
+  .discovery-title{{
+    font-size:1.3rem !important;
+  }}
+  .entry-quiz-card{{
+    padding:14px !important;
+    border-radius:18px !important;
+  }}
+  .entry-quiz-desc{{
+    font-size:0.92rem !important;
+    line-height:1.52 !important;
+  }}
   .featured-quiz {{
     padding:14px 15px !important;
   }}
@@ -1351,7 +1452,7 @@ def quiz_card_copy(quiz_id: str) -> Dict[str, str]:
         "birthday": {
             "icon": "🔮",
             "title": quiz_label("birthday"),
-            "desc": "輸入完整生日，先看生命路徑、生日天賦、外在態度與今年主題；想更深入，再自願進入 20 題團隊人性探索。",
+            "desc": "輸入完整生日，先看生命路徑、生日天賦、外在態度與今年主題。想更深入了解自己，再進入 20 題人性探索。",
         },
         "wealth": {
             "icon": "🚀",
@@ -2810,12 +2911,19 @@ def page_intro():
     render_header()
     show_partner_card()
     render_digital_card_entry()
-    st.progress(0.0)
     track_event("intro_viewed", quiz_id=st.session_state.quiz_id, once_key="intro_viewed")
 
     st.markdown('<div id="digital-test-entry"></div>', unsafe_allow_html=True)
     st.markdown("---")
-    st.markdown("### 🧪 先從最有共鳴的方式認識自己")
+    st.markdown(
+        """
+        <div class="discovery-heading">
+          <div class="discovery-kicker">SELF DISCOVERY</div>
+          <div class="discovery-title">先從一個輕鬆的入口認識自己</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     if ACQUISITION.forced_quiz:
         st.session_state.quiz_id = ACQUISITION.forced_quiz
     cur_id = st.session_state.quiz_id
@@ -2824,10 +2932,19 @@ def page_intro():
         card = quiz_card_copy(cur_id)
         st.markdown(
             f"""
-            <div class="glass-card">
-              <div class="glass-title">{card["icon"]} {card["title"]}</div>
-              <div class="glass-body">{card["desc"]}</div>
-              <div class="glass-hint">已依分享連結直接帶你進入這個主題。</div>
+            <div class="entry-quiz-card">
+              <div class="entry-quiz-head">
+                <div class="entry-quiz-icon">{card["icon"]}</div>
+                <div>
+                  <div class="entry-quiz-eyebrow">10 秒・免註冊</div>
+                  <div class="entry-quiz-title">{card["title"]}</div>
+                </div>
+              </div>
+              <div class="entry-quiz-desc">{card["desc"]}</div>
+              <div class="entry-quiz-meta">
+                <span>完整結果直接看</span>
+                <span>深入探索再繼續</span>
+              </div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -2840,7 +2957,7 @@ def page_intro():
               <div class="dopa-icon">🔮</div>
               <div class="dopa-title">10 秒看見你的生命靈數</div>
               <div class="dopa-badge">本月主打｜先看結果，不用答題</div>
-              <div class="dopa-desc">完整生日一次看生命路徑、生日天賦、外在態度、數字分布與今年主題；想更深入，再自願做 20 題人性探索。</div>
+              <div class="dopa-desc">完整生日一次看生命路徑、生日天賦、外在態度、數字分布與今年主題。想更深入了解自己，再進入 20 題人性探索。</div>
               <div class="privacy-note">完整生日只用於當次計算；結果免註冊、直接看。</div>
             </div>
             """,
@@ -2971,7 +3088,7 @@ def page_intro():
         elif st.session_state.quiz_id != "wealth":
             state_final = st.session_state.u_state or ""
 
-    st.caption("免註冊，完整結果直接看；只有主動同意才會建立後續名單。")
+    st.caption("免註冊，完整結果直接看。")
     start_label = (
         "立即看我的完整生命靈數"
         if st.session_state.quiz_id == "birthday"
