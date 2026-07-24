@@ -81,8 +81,8 @@ except Exception:
 # =========================
 st.set_page_config(page_title="2026 AI 風格診斷", page_icon="🤖", layout="centered")
 
-APP_VERSION = "growth-funnel-v3.7.1"
-BIRTHDAY_QUIZ_VERSION = "2026LIFE2-HUM20-v1.0"
+APP_VERSION = "growth-funnel-v3.8.0"
+BIRTHDAY_QUIZ_VERSION = "2026LIFE2-MINIIPIP20-v2.0"
 WEALTH_QUIZ_VERSION = "2026Q1-10Q-v1.2"
 HEALTH_QUIZ_VERSION = "2026H1-10Q-v1.1"
 DEFAULT_APP_URL = "https://richaiproject-xzwznzb6fdd35n8otuxgha.streamlit.app/"
@@ -944,6 +944,29 @@ pre, code{{
 .hero-subtitle{{ font-size:1.05rem; color:rgba(255,255,255,0.78) !important; margin:0 0 8px 0; }}
 .quiz-step{{ font-size:1.15rem; font-weight:1000; margin-top:4px; }}
 .quiz-question{{ font-size:1.55rem; font-weight:1000; margin:6px 0 10px 0; }}
+[class*="st-key-b_"] [role="radiogroup"] {{
+  display:grid !important;
+  gap:9px !important;
+}}
+[class*="st-key-b_"] [role="radiogroup"] label {{
+  margin:0 !important;
+  padding:11px 14px !important;
+  min-height:50px;
+  border:1px solid rgba(255,255,255,0.12);
+  border-radius:15px;
+  background:rgba(255,255,255,0.045);
+  transition:border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}}
+[class*="st-key-b_"] [role="radiogroup"] label:hover {{
+  border-color:rgba(200,155,255,0.55);
+  background:rgba(200,155,255,0.10);
+  transform:translateY(-1px);
+}}
+[class*="st-key-b_"] [role="radiogroup"] label:has(input:checked) {{
+  border-color:#C89BFF;
+  background:linear-gradient(135deg, rgba(200,155,255,0.22), rgba(96,218,178,0.10));
+  box-shadow:0 8px 24px rgba(99,72,156,0.18);
+}}
 
 /* Dopamine cards */
 .dopamine-card {{
@@ -1027,6 +1050,12 @@ pre, code{{
   color:#E2C8FF !important;
   font-size:1.05rem;
   font-weight:1000;
+}}
+.score-note {{
+  margin-top:3px;
+  color:rgba(255,255,255,0.58) !important;
+  font-size:0.69rem;
+  line-height:1.25;
 }}
 
 /* Sticky CTA */
@@ -1610,7 +1639,10 @@ def quiz_card_copy(quiz_id: str) -> Dict[str, str]:
         "birthday": {
             "icon": "🔮",
             "title": quiz_label("birthday"),
-            "desc": "輸入完整生日，先看一個主要類型、兩個補充觀察與今年主題。想更深入了解自己，再進入 20 題人性探索。",
+            "desc": (
+                "輸入完整生日，先看主要類型與今年主題；"
+                "想更深入了解自己，再進入 20 題團隊互動探索。"
+            ),
         },
         "wealth": {
             "icon": "🚀",
@@ -1991,11 +2023,8 @@ def build_birthday_answers_payload(
             "question": question["text"],
             "value": value,
             "answer": answer,
-            "animal": (
-                ANIMAL_PROFILES[value]["label"]
-                if value in ANIMAL_PROFILES
-                else ""
-            ),
+            "trait": str(question.get("trait", "")),
+            "reverse_keyed": bool(question.get("reverse", False)),
         }
     return payload
 
@@ -2154,7 +2183,8 @@ def build_push_message_birthday(
         f"👤 受測者：{st.session_state.u_name}\n"
         f"✨ 結果：{report.get('combined_title','')}\n"
         f"🔢 生命靈數：{report.get('life_path','')}號 {report.get('core_label','')}\n"
-        f"🐾 動物原型：{report.get('animal_title','')}\n"
+        f"🐾 團隊互動：{report.get('animal_title','')}（{report.get('animal_balance_label','')}）\n"
+        f"🧭 特徵標籤：{' / '.join(report.get('modifier_tags', []))}\n"
         f"🎯 興趣：{interest}\n"
         f"🔁 ref_in→ref_ok：{norm_ref(get_qp('ref','master'))} → {ref_resolved}"
     )
@@ -2446,7 +2476,7 @@ def write_lead_and_notify_health(report: Dict[str, Any], interest: str) -> str:
 
 
 # =========================
-# 13) LINE「可直接貼」文案（生命靈數 × 人性動物原型）
+# 13) LINE「可直接貼」文案（生命靈數 × 團隊互動探索）
 # =========================
 def build_line_share_text_life_path(
     *,
@@ -2488,17 +2518,24 @@ def build_line_share_text_birthday(
     partner_name: str,
     report: Dict[str, Any],
 ) -> str:
+    trait_line = "｜".join(
+        f"{label}{score}"
+        for label, score in report.get("trait_scores", {}).items()
+    )
     lines = [
-        "✨【生命靈數 × 人性動物原型｜結果摘要】",
+        "✨【生命靈數 × 團隊互動探索｜結果摘要】",
         f"👤 {client_name}",
-        f"🔮 我的生命原型：{report.get('combined_title','')}",
+        f"🧭 我的探索結果：{report.get('combined_title','')}",
         (
             f"🔢 生命靈數：{report.get('life_path','')}號 "
             f"{report.get('core_emoji','')} {report.get('core_label','')}"
         ),
         f"💎 天生強項：{report.get('birthday_label','')}",
         f"👀 第一印象：{report.get('attitude_label','')}",
-        f"🐾 團隊溝通風格：{report.get('animal_emoji','')} {report.get('animal_title','')}",
+        f"🐾 團隊互動風格：{report.get('animal_emoji','')} {report.get('animal_title','')}",
+        f"🔀 風格關係：{report.get('animal_balance_label','')}",
+        f"📊 五項分布：{trait_line}",
+        f"🏷️ 個人標籤：{'｜'.join(report.get('modifier_tags', []))}",
         "—",
         f"💬 {report.get('summary','')}",
         "",
@@ -2520,6 +2557,7 @@ def build_line_share_text_birthday(
         [
             "—",
             f"這份測驗由 {partner_name} 分享；完整結果直接看，不用先加好友。",
+            "五項分數是量尺換算，不是人口百分位；動物名稱是互動風格摘要。",
         ]
     )
     return "\n".join(lines)
@@ -2909,7 +2947,11 @@ def render_campaign_share_pack():
 
 def render_result_share_pack(result_title: str, result_summary: str):
     quiz_id = st.session_state.quiz_id
-    label = quiz_label(quiz_id)
+    label = (
+        "20 題團隊互動探索"
+        if quiz_id == "birthday" and st.session_state.page == "result"
+        else quiz_label(quiz_id)
+    )
     share_url = build_share_url(APP_PUBLIC_URL, ACQUISITION, quiz_id)
     pack = build_partner_share_pack(
         partner_name=str(partner.get("name", "")).strip(),
@@ -2939,7 +2981,7 @@ def render_result_share_pack(result_title: str, result_summary: str):
 
 
 def render_radar_chart_birthday(scores: Dict[str, int]):
-    labels = [ANIMAL_PROFILES[key]["label"] for key in (1, 2, 3, 4)]
+    labels = ["外向互動", "同理合作", "規劃執行", "情緒穩定", "開放探索"]
     values = [int(scores.get(label, 0) or 0) for label in labels]
 
     if HAS_PLOTLY:
@@ -2949,15 +2991,15 @@ def render_radar_chart_birthday(scores: Dict[str, int]):
                 r=values + [values[0]],
                 theta=labels + [labels[0]],
                 fill="toself",
-                name="你的人性動物原型",
+                name="你的五向度分布",
             )
         )
         fig.update_layout(
             polar=dict(
                 radialaxis=dict(
                     visible=True,
-                    range=[0, max(8, max(values, default=0))],
-                    dtick=2,
+                    range=[0, 100],
+                    dtick=25,
                     showticklabels=False,
                 ),
                 angularaxis=dict(
@@ -3189,7 +3231,7 @@ def page_intro():
               <div class="dopa-icon">🔮</div>
               <div class="dopa-title">10 秒看見你的生命靈數</div>
               <div class="dopa-badge">本月主打｜先看結果，不用答題</div>
-              <div class="dopa-desc">完整生日先看一個主要類型，再用兩個白話角度補充。想更深入了解自己，再進入 20 題人性探索。</div>
+              <div class="dopa-desc">完整生日先看主要類型與今年主題；想更深入了解自己，再進入 20 題團隊互動探索。</div>
               <div class="privacy-note">完整生日只用於當次計算；結果免註冊、直接看。</div>
             </div>
             """,
@@ -3564,18 +3606,24 @@ def page_life_path_result():
     )
 
     st.markdown("---")
-    st.markdown("## 想知道你在團隊裡怎麼被看見嗎？")
-    st.write("生命靈數看內在主軸；下一階段用情境題觀察你平常的溝通與合作反應。")
-    st.caption("進階人性探索｜約 2 分鐘・20 題，可隨時返回；不影響上面的生命靈數結果。")
+    st.markdown("## 想更了解自己的團隊互動方式嗎？")
+    st.write(
+        "下一階段以 Big Five 公開量表架構，從五個連續向度觀察你自認的"
+        "溝通、合作與行動傾向。"
+    )
+    st.caption(
+        "20 題團隊互動探索｜約 2 分鐘・五點作答，可隨時返回；"
+        "不影響上面的生命靈數結果。"
+    )
 
     with st.container(key="inline_start_cta"):
         inline_advanced_clicked = st.button(
-            "進階人性探索｜約 2 分鐘・20 題",
+            "20 題團隊互動探索｜約 2 分鐘",
             key="start_humanity_btn",
         )
     with st.container(key="mobile_start_cta"):
         mobile_advanced_clicked = st.button(
-            "🚀 進階人性探索｜20 題",
+            "🚀 開始 20 題團隊互動探索",
             key="start_humanity_btn_mobile",
         )
     if inline_advanced_clicked or mobile_advanced_clicked:
@@ -3620,7 +3668,9 @@ def page_quiz():
 
     if quiz_id == "birthday":
         question = HUMANITY_QUESTIONS[step - 1]
-        st.caption("人性探索｜請依照平常最自然的反應作答")
+        st.caption(
+            "20 題團隊互動探索｜依平常大多數時候作答，不用選理想中的自己"
+        )
         st.markdown(
             f'<div class="quiz-question">{html_escape(question["text"])}</div>',
             unsafe_allow_html=True,
@@ -3635,7 +3685,7 @@ def page_quiz():
             else None
         )
         choice_label = st.radio(
-            "請選擇最像你的選項：",
+            "這句話有多像平常的你？",
             labels,
             index=default_index,
             key=f"b_{step}",
@@ -3656,10 +3706,14 @@ def page_quiz():
                     st.rerun()
 
             with c2:
-                btn_txt = "下一題 ➡️" if step < total else "查看我的生命原型 ✅"
+                btn_txt = (
+                    "下一題 ➡️"
+                    if step < total
+                    else "查看我的團隊互動風格 ✅"
+                )
                 if st.button(btn_txt, key=f"b_next_{step}"):
                     if not choice_label:
-                        st.warning("請先選擇一個最接近平常自己的答案。")
+                        st.warning("請先選擇這句話有多像平常的你。")
                         st.stop()
                     st.session_state.answers_map[step] = values[
                         labels.index(choice_label)
@@ -3917,24 +3971,40 @@ def page_result():
                 "animal_primary": report["primary"],
                 "animal_secondary": report["secondary"],
                 "animal_intensity": report["animal_intensity"],
+                "scoring_model": report["scoring_model"],
+                "trait_scores": report["trait_scores"],
             },
             once_key="result_viewed|birthday",
+        )
+        trait_signature = "|".join(
+            str(score) for score in report["trait_scores"].values()
         )
         auto_notify_result(
             notification_key=(
                 f"humanity|{report['life_path']}|{report['primary']}|"
-                f"{report['secondary']}|{report['animal_intensity']}"
+                f"{report['secondary']}|{report['animal_intensity']}|"
+                f"{trait_signature}"
             ),
-            quiz_id="進階人性探索",
+            quiz_id="20題團隊互動探索",
             title=str(report["combined_title"]),
             detail_lines=[
                 f"生命靈數：{report['life_path']} 號・{report['core_label']}",
                 f"團隊風格：{report['animal_title']}",
+                "五向度："
+                + " / ".join(
+                    f"{label}{score}"
+                    for label, score in report["trait_scores"].items()
+                ),
             ],
         )
 
         st.markdown(
-            f"### {report['core_emoji']}{report['animal_emoji']} 你的生命原型：**{report['combined_title']}**"
+            f"### {report['animal_emoji']} 你的團隊互動風格："
+            f"**{report['animal_title']}**"
+        )
+        st.caption(report["animal_balance_label"])
+        st.markdown(
+            "｜".join(f"**{tag}**" for tag in report["modifier_tags"])
         )
         st.markdown(
             f"**內在動力：生命靈數 {report['life_path']} 號・{report['core_label']}**"
@@ -3946,7 +4016,6 @@ def page_result():
         st.markdown(
             f"**第一印象：{report['attitude_label']}**"
         )
-        st.markdown(f"**外在／團隊風格：{report['animal_title']}**")
         st.write(report["summary"])
         st.info(report["cross_insight"])
         st.markdown(
@@ -3954,21 +4023,37 @@ def page_result():
         )
         st.caption("完整生日不會出現在事件追蹤、名單或分享文字；只使用不含原始日期的推導數字。")
 
-        st.markdown("#### 📊 四種動物傾向")
-        render_radar_chart_birthday(report["scores"])
+        st.markdown("#### 📊 五項連續向度")
+        st.caption(
+            "分數是 0–100 的量尺換算，不是人口百分位；"
+            "高低代表偏好方向，不代表好壞。"
+        )
+        render_radar_chart_birthday(report["trait_scores"])
         score_items = "".join(
             (
                 '<div class="score-item">'
                 f'<div class="score-label">{html_escape(label)}</div>'
-                f'<div class="score-value">{int(report["scores"][label])} 題</div>'
+                f'<div class="score-value">{int(score)}</div>'
+                '<div class="score-note">'
+                f'{html_escape(report["trait_descriptions"][label])}'
+                "</div>"
                 "</div>"
             )
-            for label in ("老虎", "海豚", "企鵝", "蜜蜂")
+            for label, score in report["trait_scores"].items()
         )
         st.markdown(
             f'<div class="score-grid">{score_items}</div>',
             unsafe_allow_html=True,
         )
+        with st.expander("動物風格是怎麼對應的？", expanded=False):
+            st.write(
+                "動物只作為容易理解的故事摘要：外向互動較高時偏向"
+                "老虎／海豚，較沉靜時偏向企鵝／蜜蜂；同理合作較突出"
+                "時偏向海豚／企鵝，規劃執行較突出時偏向老虎／蜜蜂。"
+            )
+            st.caption(
+                "開放探索與情緒穩定保留為個人修飾標籤，不硬塞進動物分類。"
+            )
 
         st.markdown("## 🧠 完整解析")
         st.markdown("### 💎 你可以信任的三個優勢")
@@ -3992,8 +4077,9 @@ def page_result():
             unsafe_allow_html=True,
         )
         st.caption(
-            "說明：生命靈數與動物原型是自我探索、團隊溝通的趣味工具；"
-            "不是經科學驗證的心理測驗，也不是心理或醫療診斷。"
+            "說明：20 題採 Mini-IPIP 五因素架構；目前繁中措辭與動物對應"
+            "仍是本地試行版。生命靈數與動物故事不屬於心理診斷，"
+            "本結果也不應用於招募、醫療或重大決策。"
         )
 
         st.markdown("---")
@@ -4017,7 +4103,7 @@ def page_result():
         )
 
         st.markdown("---")
-        st.markdown("## 🧾 我的生命原型｜可直接貼 LINE")
+        st.markdown("## 🧾 我的探索結果｜可直接貼 LINE")
         share_text = build_line_share_text_birthday(
             client_name=st.session_state.u_name,
             interest=interest or "先保留結果",
@@ -4026,7 +4112,7 @@ def page_result():
             report=report,
         )
         st.code(share_text, language=None)
-        render_copy_box(share_text, "複製我的生命原型", "birthday_summary")
+        render_copy_box(share_text, "複製我的探索結果", "birthday_summary")
         render_result_share_pack(
             str(report["combined_title"]),
             str(report["summary"]),

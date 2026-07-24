@@ -35,10 +35,24 @@ def set_result_state(app: AppTest, quiz: str) -> None:
         app.session_state["birth_year"] = 1991
         app.session_state["birth_month"] = 12
         app.session_state["birth_day"] = 29
-        values = [4] * 8 + [1] * 4 + [2] * 4 + [3] * 4
-        app.session_state["answers_map"] = {
-            index: value for index, value in enumerate(values, start=1)
-        }
+        answers = {index: 3 for index in range(1, 21)}
+        answers.update(
+            {
+                1: 5,
+                6: 1,
+                11: 5,
+                16: 1,
+                2: 1,
+                7: 5,
+                12: 1,
+                17: 5,
+                3: 5,
+                8: 1,
+                13: 5,
+                18: 1,
+            }
+        )
+        app.session_state["answers_map"] = answers
     elif quiz == "wealth":
         app.session_state["answers_map"] = {i: "A" for i in range(1, 11)}
     else:
@@ -58,7 +72,7 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertIn("選一個你方便的方式", markdown)
         self.assertNotIn("自然的開場話題", markdown)
         self.assertIn("10 秒看見你的生命靈數", markdown)
-        self.assertIn("想更深入了解自己，再進入 20 題人性探索", markdown)
+        self.assertIn("想更深入了解自己，再進入 20 題團隊互動探索", markdown)
         self.assertIn('alt="RICH TEAM"', markdown)
         self.assertIn("@keyframes richRevealUp", markdown)
         self.assertIn("@media (prefers-reduced-motion:reduce)", markdown)
@@ -166,10 +180,13 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertEqual(len(app.exception), 0)
         markdown = "\n".join(element.value for element in app.markdown)
         code = "\n".join(element.value for element in app.code)
-        self.assertIn("7號洞察者 × 大蜜蜂", markdown)
+        self.assertIn("你的團隊互動風格", markdown)
+        self.assertIn("老虎 × 海豚", markdown)
         self.assertIn("生命靈數 7 號", markdown)
+        self.assertIn("五項連續向度", markdown)
+        self.assertIn("外向互動", markdown)
         self.assertIn("完整解析", markdown)
-        self.assertIn("我的生命原型", markdown)
+        self.assertIn("我的探索結果", markdown)
         self.assertIn("LINE 傳給朋友", markdown)
         self.assertIn("＋ 加入侯閔議的 LINE", markdown)
         self.assertIn("https://line.me/R/share?text=", markdown)
@@ -203,6 +220,7 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertEqual(len(app.exception), 0)
         self.assertEqual(len(app.radio), 1)
         self.assertIsNone(app.radio[0].value)
+        self.assertEqual(len(app.radio[0].options), 5)
         self.assertEqual(
             [button.label for button in app.button],
             ["⬅️ 上一題", "下一題 ➡️"],

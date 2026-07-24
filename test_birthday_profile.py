@@ -7,9 +7,29 @@ from birthday_profile import (
 )
 
 
-def answers_with_counts(*, tiger: int, dolphin: int, penguin: int, bee: int):
-    values = [1] * tiger + [2] * dolphin + [3] * penguin + [4] * bee
-    return {index: value for index, value in enumerate(values, start=1)}
+def balanced_answers():
+    return {index: 3 for index in range(1, 21)}
+
+
+def answers_for_tiger():
+    answers = balanced_answers()
+    answers.update(
+        {
+            1: 5,
+            6: 1,
+            11: 5,
+            16: 1,
+            2: 1,
+            7: 5,
+            12: 1,
+            17: 5,
+            3: 5,
+            8: 1,
+            13: 5,
+            18: 1,
+        }
+    )
+    return answers
 
 
 class HumanityProfileTest(unittest.TestCase):
@@ -47,42 +67,50 @@ class HumanityProfileTest(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, report)
 
-    def test_seven_is_standard_animal_type(self):
+    def test_reverse_keyed_items_produce_five_trait_scores(self):
         report = compute_humanity_report(
-            answers_with_counts(tiger=7, dolphin=5, penguin=4, bee=4),
+            answers_for_tiger(),
             3,
         )
-        self.assertEqual(report["animal_title"], "老虎")
-        self.assertEqual(report["combined_title"], "3號表達者 × 老虎")
-        self.assertEqual(report["animal_intensity"], "standard")
-
-    def test_above_seven_is_big_animal_type(self):
-        report = compute_humanity_report(
-            answers_with_counts(tiger=4, dolphin=4, penguin=4, bee=8),
-            7,
+        self.assertEqual(
+            report["trait_scores"],
+            {
+                "外向互動": 100,
+                "同理合作": 0,
+                "規劃執行": 100,
+                "情緒穩定": 50,
+                "開放探索": 50,
+            },
         )
-        self.assertEqual(report["animal_title"], "大蜜蜂")
-        self.assertEqual(report["combined_title"], "7號洞察者 × 大蜜蜂")
-        self.assertEqual(report["animal_intensity"], "big")
+        self.assertEqual(report["animal_title"], "老虎 × 海豚")
+        self.assertEqual(report["combined_title"], "3號表達者｜老虎 × 海豚")
+        self.assertEqual(report["animal_intensity"], "primary")
 
-    def test_top_tie_is_visible_as_two_primary_types(self):
+    def test_close_top_scores_are_visible_as_dual_core(self):
+        answers = answers_for_tiger()
+        answers.update({2: 5, 7: 1, 12: 5, 17: 1})
         report = compute_humanity_report(
-            answers_with_counts(tiger=7, dolphin=7, penguin=3, bee=3),
+            answers,
             2,
         )
         self.assertTrue(report["is_mixed"])
         self.assertEqual(report["animal_title"], "老虎 × 海豚")
         self.assertEqual(report["primary"], "tiger")
         self.assertEqual(report["secondary"], "dolphin")
+        self.assertEqual(report["animal_balance_label"], "雙核心風格")
 
     def test_balanced_scores_are_octopus(self):
         report = compute_humanity_report(
-            answers_with_counts(tiger=5, dolphin=5, penguin=5, bee=5),
+            balanced_answers(),
             9,
         )
-        self.assertEqual(report["animal_title"], "八爪")
+        self.assertEqual(report["animal_title"], "八爪平衡型")
         self.assertEqual(report["primary"], "octopus")
         self.assertEqual(report["animal_intensity"], "balanced")
+        self.assertEqual(
+            report["animal_scores"],
+            {"老虎": 50, "海豚": 50, "企鵝": 50, "蜜蜂": 50},
+        )
 
     def test_report_requires_all_twenty_answers(self):
         with self.assertRaises(ValueError):
@@ -90,7 +118,7 @@ class HumanityProfileTest(unittest.TestCase):
 
     def test_report_never_contains_raw_birth_date(self):
         report = compute_humanity_report(
-            answers_with_counts(tiger=8, dolphin=4, penguin=4, bee=4),
+            answers_for_tiger(),
             6,
         )
         for forbidden in ("birth_year", "birth_month", "birth_day", "year", "month", "day"):

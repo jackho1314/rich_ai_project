@@ -1,8 +1,9 @@
-"""Stable scoring module for the life-path and humanity-animal quiz.
+"""Stable scoring module for the life-path and Mini-IPIP exploration.
 
 The life-path layer is a numerology-inspired reflection prompt.  The 20-item
-humanity layer describes communication preferences in a team.  Neither layer
-is a psychological, medical, or scientific diagnosis.
+layer follows the public-domain Mini-IPIP five-factor structure; its animal
+labels are a local storytelling layer rather than validated personality types.
+Neither layer is a psychological, medical, or clinical diagnosis.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ ANIMAL_PROFILES = {
         "code": "tiger",
         "label": "老虎",
         "emoji": "🐯",
+        "short": "先抓目標、快速判斷並推動事情",
         "summary": "你習慣抓住目標、快速判斷，遇到需要推進的時刻通常願意站到前面。",
         "team_strength": "定方向、做決策、在壓力下把團隊往成果推進。",
         "blind_spot": "速度與標準一拉高，可能讓較慢熱的人來不及說出顧慮。",
@@ -29,6 +31,7 @@ ANIMAL_PROFILES = {
         "code": "dolphin",
         "label": "海豚",
         "emoji": "🐬",
+        "short": "用互動、表達與連結帶動參與",
         "summary": "你重視互動與感受，能用熱情、故事和連結讓人願意參與。",
         "team_strength": "創造氣氛、凝聚關係、把抽象想法說得有感染力。",
         "blind_spot": "靈感與人際訊號很多時，容易低估細節、時間或收尾。",
@@ -39,6 +42,7 @@ ANIMAL_PROFILES = {
         "code": "penguin",
         "label": "企鵝",
         "emoji": "🐧",
+        "short": "以傾聽、耐心與支持維持合作",
         "summary": "你重視穩定、信任與和諧，願意傾聽並用耐心守住合作節奏。",
         "team_strength": "穩定團隊、照顧關係、持續把已承諾的事做好。",
         "blind_spot": "為了避免衝突或變動，可能太晚說出不同意見與自己的需求。",
@@ -49,6 +53,7 @@ ANIMAL_PROFILES = {
         "code": "bee",
         "label": "蜜蜂",
         "emoji": "🐝",
+        "short": "先釐清資料與方法，再守住品質",
         "summary": "你重視正確、品質與方法，會先釐清資料，再用可靠流程完成事情。",
         "team_strength": "分析風險、建立標準、找出細節中的漏洞並守住品質。",
         "blind_spot": "資料還不夠完整時，可能反覆分析，讓決策與嘗試延後。",
@@ -59,6 +64,7 @@ ANIMAL_PROFILES = {
         "code": "octopus",
         "label": "八爪",
         "emoji": "🐙",
+        "short": "依情境彈性切換互動與行動方式",
         "summary": "你的四種傾向相對平均，會依人、情境與任務彈性切換做法。",
         "team_strength": "能讀懂不同角色、補位協調，並在多種溝通方式之間轉換。",
         "blind_spot": "太常配合情境時，別人可能看不清你的優先順序，你也容易同時承接太多。",
@@ -221,206 +227,192 @@ def _reduce_to_digit(value: int) -> int:
     return value
 
 
+LIKERT_OPTIONS = [
+    ("1　很不像我", 1),
+    ("2　比較不像我", 2),
+    ("3　一半一半", 3),
+    ("4　比較像我", 4),
+    ("5　很像我", 5),
+]
+
+
+TRAIT_PROFILES = {
+    "E": {
+        "label": "外向互動",
+        "high": "主動表達",
+        "middle": "彈性互動",
+        "low": "沉靜觀察",
+    },
+    "A": {
+        "label": "同理合作",
+        "high": "同理合作",
+        "middle": "合作有界線",
+        "low": "獨立直率",
+    },
+    "C": {
+        "label": "規劃執行",
+        "high": "規劃執行",
+        "middle": "依情境規劃",
+        "low": "彈性即興",
+    },
+    "ES": {
+        "label": "情緒穩定",
+        "high": "沉著穩定",
+        "middle": "情境調節",
+        "low": "敏銳反應",
+    },
+    "O": {
+        "label": "開放探索",
+        "high": "探索創新",
+        "middle": "彈性整合",
+        "low": "務實聚焦",
+    },
+}
+
+
+# Traditional-Chinese pilot adaptation of the public-domain Mini-IPIP.
+# Keep the original five-factor item order and reverse-key structure.  Local
+# reliability and validity should be checked before calling it a Taiwan norm.
 HUMANITY_QUESTIONS = [
     {
-        "id": "HUM01",
-        "text": "當你和朋友一起用餐時，在選擇用餐或是吃什麼時，你常是：",
-        "options": [
-            ("決定者：意見不同時，通常都是決定者", 1),
-            ("氣氛製造者：吃什麼，很能帶動情緒氣氛", 2),
-            ("附和者：隨便，沒意見", 3),
-            ("意見提供者：常去否定別人的提議，自己卻又沒意見，也不做任何決定", 4),
-        ],
+        "id": "MIPIP01",
+        "text": "在聚會或團體中，我常能帶動現場氣氛。",
+        "trait": "E",
+        "reverse": False,
+        "options": LIKERT_OPTIONS,
     },
     {
-        "id": "HUM02",
-        "text": "當你買衣服時，你是：",
-        "options": [
-            ("不易受售貨員影響，「心中自有定見」", 1),
-            ("售貨員的親切及好的感受，常會促進你的購買", 2),
-            ("找熟悉的店購買", 3),
-            ("品質與價錢是否成比例，價錢是否合理？", 4),
-        ],
+        "id": "MIPIP02",
+        "text": "我能理解並關心別人的感受。",
+        "trait": "A",
+        "reverse": False,
+        "options": LIKERT_OPTIONS,
     },
     {
-        "id": "HUM03",
-        "text": "你的消費習慣是：",
-        "options": [
-            ("找到要買的東西，付錢走人", 1),
-            ("很隨意地逛，不特定買什麼", 2),
-            ("有一定的消費習慣，不太喜歡變化", 3),
-            ("較注意東西好不好，較有成本觀念", 4),
-        ],
+        "id": "MIPIP03",
+        "text": "該做的事情，我通常會很快開始處理。",
+        "trait": "C",
+        "reverse": False,
+        "options": LIKERT_OPTIONS,
     },
     {
-        "id": "HUM04",
-        "text": "你的朋友，以一句話來形容你，他們會說：",
-        "options": [
-            ("蠻「鴨霸」的", 1),
-            ("熱情洋溢", 2),
-            ("溫和斯文", 3),
-            ("要求完美", 4),
-        ],
+        "id": "MIPIP04",
+        "text": "我的情緒容易在短時間內出現起伏。",
+        "trait": "ES",
+        "reverse": True,
+        "options": LIKERT_OPTIONS,
     },
     {
-        "id": "HUM05",
-        "text": "你自認哪一種形容，最能表現你的特色：",
-        "options": [
-            ("果敢的，能接受挑戰", 1),
-            ("生動活潑，不拘小節", 2),
-            ("愛傾聽，喜歡穩定", 3),
-            ("處世謹慎小心，重數據分析", 4),
-        ],
+        "id": "MIPIP05",
+        "text": "我很容易在腦中想像出畫面或新的點子。",
+        "trait": "O",
+        "reverse": False,
+        "options": LIKERT_OPTIONS,
     },
     {
-        "id": "HUM06",
-        "text": "你覺得做事的重點，應該是：",
-        "options": [
-            ("做什麼？重結果", 1),
-            ("誰來做？重感受（過程）", 2),
-            ("為何做？重品質", 3),
-            ("怎麼做？重執行", 4),
-        ],
+        "id": "MIPIP06",
+        "text": "我平常不太主動說話。",
+        "trait": "E",
+        "reverse": True,
+        "options": LIKERT_OPTIONS,
     },
     {
-        "id": "HUM07",
-        "text": "與同事有意見衝突（或不同）時，你是：",
-        "options": [
-            ("說服對方，聽從自己的意見", 1),
-            ("問其他同事或上司之意見，尋求支持", 2),
-            ("退讓，以和為貴", 3),
-            ("與衝突者協調，找尋最好的意見", 4),
-        ],
+        "id": "MIPIP07",
+        "text": "別人遇到問題時，我通常不會投入太多注意力。",
+        "trait": "A",
+        "reverse": True,
+        "options": LIKERT_OPTIONS,
     },
     {
-        "id": "HUM08",
-        "text": "什麼樣的工作環境，最能鼓舞你：",
-        "options": [
-            ("能讓你決定事情，具領導地位的", 1),
-            ("同事相處愉快，處處受歡迎", 2),
-            ("穩定中求發展", 3),
-            ("講品質，重效率的工作", 4),
-        ],
+        "id": "MIPIP08",
+        "text": "我常忘記把用過的東西放回原位。",
+        "trait": "C",
+        "reverse": True,
+        "options": LIKERT_OPTIONS,
     },
     {
-        "id": "HUM09",
-        "text": "以下的溝通方式，哪一項最符合你：",
-        "options": [
-            ("直接了當，較權威式的", 1),
-            ("表情豐富，肢體語言較多", 2),
-            ("先聽別人意見，而後溫和表達自己的意見", 3),
-            ("不露感情，理多於情，愛分析，較冷靜", 4),
-        ],
+        "id": "MIPIP09",
+        "text": "大部分時間，我能保持放鬆。",
+        "trait": "ES",
+        "reverse": False,
+        "options": LIKERT_OPTIONS,
     },
     {
-        "id": "HUM10",
-        "text": "在每一次會議中或公司決策提案時，你所扮演的角色為何：",
-        "options": [
-            ("據理力爭者", 1),
-            ("協調者", 2),
-            ("贊同多數者", 3),
-            ("分析所有提案以供參考者", 4),
-        ],
+        "id": "MIPIP10",
+        "text": "我對抽象概念或理論通常沒有興趣。",
+        "trait": "O",
+        "reverse": True,
+        "options": LIKERT_OPTIONS,
     },
     {
-        "id": "HUM11",
-        "text": "依照直覺選一個：",
-        "options": [
-            ("我做事一向以具體、短期能達到目標；決定快速，立即得到結果", 1),
-            ("在本性上，我喜歡跟人交往，各式各樣的人甚至陌生人都行", 2),
-            ("我不喜歡強出頭，寧可當後補", 3),
-            ("我是一個自我約束、很守紀律的人，凡事依既定目標行事", 4),
-        ],
+        "id": "MIPIP11",
+        "text": "聚會時，我會主動和許多不同的人聊天。",
+        "trait": "E",
+        "reverse": False,
+        "options": LIKERT_OPTIONS,
     },
     {
-        "id": "HUM12",
-        "text": "依照直覺選一個：",
-        "options": [
-            ("我喜歡有變化、激烈且競爭的環境，是個可接受挑戰的人", 1),
-            ("我喜歡社交，也喜歡招待人", 2),
-            ("我喜歡成為小組的一份子，固守一般性程序", 3),
-            ("我會花很多時間去研究事與人", 4),
-        ],
+        "id": "MIPIP12",
+        "text": "我很容易察覺並感受到別人的情緒。",
+        "trait": "A",
+        "reverse": False,
+        "options": LIKERT_OPTIONS,
     },
     {
-        "id": "HUM13",
-        "text": "依照直覺選一個：",
-        "options": [
-            ("我喜歡按自己的方法做事，不在乎別人對我的觀感，只要成功", 1),
-            ("有人跟我意見不一致時，我會很困擾", 2),
-            ("我知道改變有必要，但還是覺得少冒險比較好", 3),
-            ("我對自己及他人的期望很高，這些都是為符合我的高標準", 4),
-        ],
+        "id": "MIPIP13",
+        "text": "我喜歡事情安排得井然有序。",
+        "trait": "C",
+        "reverse": False,
+        "options": LIKERT_OPTIONS,
     },
     {
-        "id": "HUM14",
-        "text": "依照直覺選一個：",
-        "options": [
-            ("我擅長處理棘手的問題", 1),
-            ("我是個很熱心的人，我喜歡跟別人一起工作", 2),
-            ("我喜歡聽而不喜歡說話，一開口都說得很委婉溫和", 3),
-            ("處理事情我較不動感情，是就是，不把感情牽扯進來，也較少與人閒聊", 4),
-        ],
+        "id": "MIPIP14",
+        "text": "遇到不順心的事情時，我很容易煩躁。",
+        "trait": "ES",
+        "reverse": True,
+        "options": LIKERT_OPTIONS,
     },
     {
-        "id": "HUM15",
-        "text": "依照直覺選一個：",
-        "options": [
-            ("我喜歡有競爭，有競爭才能把潛能完全發揮出來", 1),
-            ("我較感性，與人相處或處事較不注意細節", 2),
-            ("我是個理性的組員，順著群眾，具有高度的團體意識", 3),
-            ("對事我喜歡去研究，講求證據與保證", 4),
-        ],
+        "id": "MIPIP15",
+        "text": "我不太容易理解抽象或概念性的想法。",
+        "trait": "O",
+        "reverse": True,
+        "options": LIKERT_OPTIONS,
     },
     {
-        "id": "HUM16",
-        "text": "依照直覺選一個：",
-        "options": [
-            ("我喜歡能力與權威，這是我想要的", 1),
-            ("我有時情緒化；置身有趣事務時，也可能無法掌握時間", 2),
-            ("我喜歡按部就班、穩紮穩打，不喜歡孤注一擲的方式", 3),
-            ("我很注意事務與人的細節", 4),
-        ],
+        "id": "MIPIP16",
+        "text": "在團體中，我通常待在比較不顯眼的位置。",
+        "trait": "E",
+        "reverse": True,
+        "options": LIKERT_OPTIONS,
     },
     {
-        "id": "HUM17",
-        "text": "依照直覺選一個：",
-        "options": [
-            ("對直接關係的環境，我有喜歡掌握及支配他人的傾向", 1),
-            ("在團體中我喜歡打成一片，活潑、有氣氛、有感情地相處", 2),
-            ("我較遵守傳統步驟做事，不喜歡有很大的變化", 3),
-            ("在掌握事實真相與更多資料之前，我寧可保持現狀", 4),
-        ],
+        "id": "MIPIP17",
+        "text": "我通常不太想深入了解其他人。",
+        "trait": "A",
+        "reverse": True,
+        "options": LIKERT_OPTIONS,
     },
     {
-        "id": "HUM18",
-        "text": "依照直覺選一個：",
-        "options": [
-            ("我與人溝通時會直接了當地說，不喜歡兜圈子", 1),
-            ("我喜歡幫助人，相親相愛", 2),
-            ("我不喜歡多變化的環境，而要穩定安全的生活方式", 3),
-            ("凡事我要求準確無誤，講求高品質、高標準的處事原則", 4),
-        ],
+        "id": "MIPIP18",
+        "text": "我常把事情或周遭環境弄得有些混亂。",
+        "trait": "C",
+        "reverse": True,
+        "options": LIKERT_OPTIONS,
     },
     {
-        "id": "HUM19",
-        "text": "依照直覺選一個：",
-        "options": [
-            ("我不喜歡別人逗我開心，不喜歡太多話的人", 1),
-            ("我喜歡參加團體活動，因為與很多人在一起感覺很好", 2),
-            ("對事情我沒有太多要求與意見，喜歡靜靜、有耐心地做", 3),
-            ("我做事要有一套經過計畫設計的標準作業程序來引導方向", 4),
-        ],
+        "id": "MIPIP19",
+        "text": "我很少長時間感到低落。",
+        "trait": "ES",
+        "reverse": False,
+        "options": LIKERT_OPTIONS,
     },
     {
-        "id": "HUM20",
-        "text": "依照直覺選一個：",
-        "options": [
-            ("我討厭別人告訴我事情該如何做，因我自有定見，不喜歡被支配", 1),
-            ("我是個生氣勃勃外向的人，能激起一起工作者的熱心", 2),
-            ("我喜歡獨處；若與人生活在一起，會盡量不打擾他人", 3),
-            ("我很少加入閒聊；話題有趣時，會找更多資料並小心進行", 4),
-        ],
+        "id": "MIPIP20",
+        "text": "我的想像力不算豐富。",
+        "trait": "O",
+        "reverse": True,
+        "options": LIKERT_OPTIONS,
     },
 ]
 
@@ -561,20 +553,48 @@ def build_life_path_report(
     }
 
 
-def _combined_animal_profile(dominant_values: list[int]) -> Dict[str, str]:
-    profiles = [ANIMAL_PROFILES[value] for value in dominant_values]
-    if len(profiles) == 1:
-        return dict(profiles[0])
+def _trait_band(trait: str, score: int) -> str:
+    profile = TRAIT_PROFILES[trait]
+    if score >= 70:
+        return str(profile["high"])
+    if score <= 35:
+        return str(profile["low"])
+    return str(profile["middle"])
+
+
+def _combined_animal_profile(
+    primary_value: int,
+    secondary_value: int,
+    *,
+    is_dual: bool,
+) -> Dict[str, str]:
+    primary = ANIMAL_PROFILES[primary_value]
+    secondary = ANIMAL_PROFILES[secondary_value]
+    if is_dual:
+        summary = (
+            "你會依情境在兩種核心風格之間切換："
+            f"{primary['short']}，也會{secondary['short']}。"
+        )
+    else:
+        summary = (
+            f"你平常較常{primary['short']}，"
+            f"並用{secondary['short']}補充。"
+        )
     return {
-        "summary": "你的外在風格會在兩種主型之間自然切換："
-        + "；".join(profile["summary"] for profile in profiles),
-        "team_strength": "同時擁有"
-        + "，也能".join(profile["team_strength"] for profile in profiles),
-        "blind_spot": "雙主型讓你更有彈性，也要留意角色切換過快："
-        + "；".join(profile["blind_spot"] for profile in profiles),
-        "collaboration": "和你合作時，可同時參考兩種方式："
-        + "；".join(profile["collaboration"] for profile in profiles),
-        "action": profiles[0]["action"],
+        "summary": summary,
+        "team_strength": (
+            f"{primary['team_strength']}同時也能運用{secondary['label']}的優勢："
+            f"{secondary['team_strength']}"
+        ),
+        "blind_spot": (
+            f"{primary['blind_spot']}當你切換到{secondary['label']}風格時，"
+            f"也要留意：{secondary['blind_spot']}"
+        ),
+        "collaboration": (
+            f"{primary['collaboration']}需要補充時，也可以："
+            f"{secondary['collaboration']}"
+        ),
+        "action": str(primary["action"]),
     }
 
 
@@ -582,51 +602,106 @@ def compute_humanity_report(
     answers: Mapping[int, Any],
     life_path: int,
 ) -> Dict[str, Any]:
-    """Return a presentation-ready report without retaining the raw birth date."""
+    """Score the Mini-IPIP pilot and return a raw-date-free report."""
     life_path = int(life_path)
     if life_path not in LIFE_PATH_PROFILES:
         raise ValueError("life_path must be between 1 and 9")
 
-    values = []
-    for number, _question in enumerate(HUMANITY_QUESTIONS, start=1):
+    trait_values: Dict[str, list[int]] = {
+        trait: [] for trait in TRAIT_PROFILES
+    }
+    for number, question in enumerate(HUMANITY_QUESTIONS, start=1):
         if number not in answers:
             raise ValueError(f"missing answer {number}")
         value = int(answers[number])
-        if value not in ANIMAL_ORDER:
+        if value < 1 or value > 5:
             raise ValueError(f"invalid answer {number}")
-        values.append(value)
+        scored_value = 6 - value if question["reverse"] else value
+        trait_values[str(question["trait"])].append(scored_value)
 
-    counts = Counter(values)
-    score_by_value = {value: int(counts.get(value, 0)) for value in ANIMAL_ORDER}
-    max_score = max(score_by_value.values())
+    if any(len(values) != 4 for values in trait_values.values()):
+        raise ValueError("each Mini-IPIP trait must contain four answers")
 
-    if max_score < 7:
-        dominant_values: list[int] = []
+    trait_averages = {
+        trait: round(sum(values) / len(values), 2)
+        for trait, values in trait_values.items()
+    }
+    trait_scores = {
+        trait: int(round((average - 1) / 4 * 100))
+        for trait, average in trait_averages.items()
+    }
+    trait_display_scores = {
+        str(TRAIT_PROFILES[trait]["label"]): trait_scores[trait]
+        for trait in TRAIT_PROFILES
+    }
+    trait_descriptions = {
+        str(TRAIT_PROFILES[trait]["label"]): _trait_band(
+            trait,
+            trait_scores[trait],
+        )
+        for trait in TRAIT_PROFILES
+    }
+
+    expressive = float(trait_scores["E"])
+    reserved = 100.0 - expressive
+    people_focus = max(
+        0.0,
+        min(
+            100.0,
+            50.0 + (trait_scores["A"] - trait_scores["C"]) / 2.0,
+        ),
+    )
+    task_focus = 100.0 - people_focus
+    score_by_value = {
+        1: int(round((expressive + task_focus) / 2.0)),
+        2: int(round((expressive + people_focus) / 2.0)),
+        3: int(round((reserved + people_focus) / 2.0)),
+        4: int(round((reserved + task_focus) / 2.0)),
+    }
+    ranked_values = sorted(
+        ANIMAL_ORDER,
+        key=lambda value: (-score_by_value[value], value),
+    )
+    max_score = score_by_value[ranked_values[0]]
+    min_score = score_by_value[ranked_values[-1]]
+
+    if max_score - min_score < 10:
         animal_profile = dict(ANIMAL_PROFILES["octopus"])
-        animal_title = animal_profile["label"]
+        animal_title = "八爪平衡型"
         animal_emoji = animal_profile["emoji"]
         intensity = "balanced"
         primary = "octopus"
         secondary = ""
         is_mixed = False
+        primary_label = animal_title
+        secondary_label = ""
+        animal_balance_label = "四種風格分布接近"
     else:
-        dominant_values = [
-            value for value in ANIMAL_ORDER if score_by_value[value] == max_score
-        ]
-        is_mixed = len(dominant_values) > 1
-        prefix = "大" if max_score > 7 else ""
-        animal_title = " × ".join(
-            f"{prefix}{ANIMAL_PROFILES[value]['label']}"
-            for value in dominant_values
+        primary_value, secondary_value = ranked_values[:2]
+        primary_profile = ANIMAL_PROFILES[primary_value]
+        secondary_profile = ANIMAL_PROFILES[secondary_value]
+        score_gap = score_by_value[primary_value] - score_by_value[secondary_value]
+        is_mixed = score_gap < 15
+        animal_title = (
+            f"{primary_profile['label']} × {secondary_profile['label']}"
         )
-        animal_emoji = "".join(
-            ANIMAL_PROFILES[value]["emoji"] for value in dominant_values
+        animal_emoji = (
+            f"{primary_profile['emoji']}{secondary_profile['emoji']}"
         )
-        animal_profile = _combined_animal_profile(dominant_values)
-        intensity = "big" if max_score > 7 else "standard"
-        primary = ANIMAL_PROFILES[dominant_values[0]]["code"]
-        secondary = (
-            ANIMAL_PROFILES[dominant_values[1]]["code"] if is_mixed else ""
+        animal_profile = _combined_animal_profile(
+            primary_value,
+            secondary_value,
+            is_dual=is_mixed,
+        )
+        intensity = "dual" if is_mixed else "primary"
+        primary = str(primary_profile["code"])
+        secondary = str(secondary_profile["code"])
+        primary_label = str(primary_profile["label"])
+        secondary_label = str(secondary_profile["label"])
+        animal_balance_label = (
+            "雙核心風格"
+            if is_mixed
+            else f"{primary_label}為主・{secondary_label}為輔"
         )
 
     core = LIFE_PATH_PROFILES[life_path]
@@ -634,14 +709,13 @@ def compute_humanity_report(
         ANIMAL_PROFILES[value]["label"]: score_by_value[value]
         for value in ANIMAL_ORDER
     }
-    primary_label = animal_title
-    secondary_label = (
-        ANIMAL_PROFILES[dominant_values[1]]["label"]
-        if len(dominant_values) > 1
-        else ""
-    )
+    modifier_tags = [
+        trait_descriptions[str(TRAIT_PROFILES["O"]["label"])],
+        trait_descriptions[str(TRAIT_PROFILES["ES"]["label"])],
+    ]
 
     return {
+        "scoring_model": "mini_ipip_zh_tw_pilot_v1",
         "life_path": life_path,
         "birth_energy": life_path,
         "core_label": core["label"],
@@ -656,13 +730,26 @@ def compute_humanity_report(
         "animal_intensity": intensity,
         "is_mixed": is_mixed,
         "max_animal_score": max_score,
-        "combined_title": f"{life_path}號{core['label']} × {animal_title}",
-        "summary": f"{core['essence']}外在與團隊互動則呈現「{animal_title}」：{animal_profile['summary']}",
+        "animal_balance_label": animal_balance_label,
+        "combined_title": f"{life_path}號{core['label']}｜{animal_title}",
+        "summary": (
+            f"{core['essence']}20 題自評顯示，你目前的團隊互動最接近"
+            f"「{animal_title}」：{animal_profile['summary']}"
+        ),
         "strengths": [*core["strengths"], animal_profile["team_strength"]],
         "team_strength": animal_profile["team_strength"],
         "blind_spot": f"{core['blind_spot']}{animal_profile['blind_spot']}",
         "collaboration": animal_profile["collaboration"],
         "next_action": animal_profile["action"],
+        "trait_averages": trait_averages,
+        "trait_scores": trait_display_scores,
+        "trait_descriptions": trait_descriptions,
+        "modifier_tags": modifier_tags,
+        "animal_scores": scores,
         "counts": scores,
         "scores": scores,
+        "method_note": (
+            "五項分數依 Mini-IPIP 架構換算為 0–100，並非人口百分位；"
+            "動物名稱是方便理解的互動風格摘要。"
+        ),
     }
