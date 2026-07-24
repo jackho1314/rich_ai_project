@@ -8,9 +8,10 @@
 1) 事件漏斗：開啟、開始、題目進度、完成、結果、名單與分享包
 2) 三種入口：friend / cold / social，可搭配 src / campaign / quiz
 3) 完整結果不再被必填興趣阻擋
-4) 夥伴分享包：LINE / Instagram / Facebook / 跟進文字
+4) 夥伴分享包：LINE / Instagram / Facebook
 """
 
+import base64
 import io
 import json
 import os
@@ -24,6 +25,7 @@ import uuid
 from collections import Counter
 from datetime import datetime, timezone, timedelta
 from html import escape as html_escape
+from pathlib import Path
 from typing import Optional, Tuple, Dict, Any, List
 from urllib.parse import quote
 
@@ -79,7 +81,7 @@ except Exception:
 # =========================
 st.set_page_config(page_title="2026 AI 風格診斷", page_icon="🤖", layout="centered")
 
-APP_VERSION = "growth-funnel-v3.4.0"
+APP_VERSION = "growth-funnel-v3.5.0"
 BIRTHDAY_QUIZ_VERSION = "2026LIFE2-HUM20-v1.0"
 WEALTH_QUIZ_VERSION = "2026Q1-10Q-v1.2"
 HEALTH_QUIZ_VERSION = "2026H1-10Q-v1.1"
@@ -122,6 +124,17 @@ def secret_value(*path, default=None):
         return sget(st.secrets, *path, default=default)
     except Exception:
         return default
+
+
+@st.cache_data(show_spinner=False)
+def local_image_data_uri(path_text: str) -> str:
+    """Return a local PNG as an embeddable data URI."""
+    try:
+        payload = Path(path_text).read_bytes()
+    except (OSError, ValueError):
+        return ""
+    encoded = base64.b64encode(payload).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
 
 
 def norm_ref(x: str) -> str:
@@ -417,14 +430,14 @@ partner = pick_partner(df_all, ref_input)
 ENTRY_UI = entry_copy(ACQUISITION, str(partner.get("name", "")).strip())
 
 p_img = drive_img(partner.get("img_url", ""), width=800)
-BADGE_FILE_ID = "1Dz9q_hoxG4BN9YOHymw7JjqJaq5kEFGf"
-BADGE_URL = "" if DEMO_MODE else drive_img(BADGE_FILE_ID, width=200)
+RICH_TEAM_LOGO_PATH = Path(__file__).resolve().parent / "rich-team-logo.png"
+BADGE_URL = local_image_data_uri(str(RICH_TEAM_LOGO_PATH))
 
 
 # =========================
 # 5) CSS（玻璃卡 + 多巴胺卡 + 黏著 CTA）
 # =========================
-CSS_VERSION = "2026-07-24-growth-v2.4.0"
+CSS_VERSION = "2026-07-24-growth-v2.5.0"
 
 st.markdown(
     f"""
@@ -538,8 +551,8 @@ pre, code{{
 
 /* Badge */
 .card-badge{{
-  position:absolute; top:10px; right:10px; width:28px !important; height:auto;
-  opacity:0.98; filter:drop-shadow(0 10px 22px rgba(255,215,0,0.18));
+  position:absolute; top:10px; right:12px; width:68px !important; height:auto;
+  opacity:0.94; filter:drop-shadow(0 10px 20px rgba(214,177,111,0.18));
   pointer-events:none; z-index:9999 !important;
 }}
 
@@ -569,7 +582,7 @@ pre, code{{
   position:relative; overflow:hidden;
   display:flex !important; flex-direction:row !important; align-items:center !important;
   gap:12px !important;
-  padding:12px 14px; border-radius:18px;
+  padding:12px 84px 12px 14px; border-radius:18px;
   border:1px solid rgba(255,255,255,0.10);
   background:rgba(255,255,255,0.05);
   box-shadow:0 10px 25px rgba(0,0,0,0.22);
@@ -585,6 +598,91 @@ pre, code{{
 .partner-name{{ font-size:1.25rem; font-weight:1000; margin-top:2px; }}
 .partner-title{{ font-size:0.98rem; color:rgba(255,255,255,0.78) !important; margin-top:2px; }}
 .partner-ref{{ margin-top:4px; font-size:0.82rem; color:rgba(255,255,255,0.65) !important; }}
+
+/* HyperFrames-inspired choreography: brief, hierarchical, and deterministic. */
+@keyframes richRevealUp {{
+  0% {{ opacity:0; transform:translate3d(0, 15px, 0); filter:blur(3px); }}
+  100% {{ opacity:1; transform:translate3d(0, 0, 0); filter:blur(0); }}
+}}
+@keyframes richCardRise {{
+  0% {{ opacity:0; transform:translate3d(0, 20px, 0) scale(0.985); }}
+  100% {{ opacity:1; transform:translate3d(0, 0, 0) scale(1); }}
+}}
+@keyframes richLogoReveal {{
+  0% {{ opacity:0; transform:scale(0.78) rotate(-4deg); filter:blur(3px); }}
+  72% {{ opacity:1; transform:scale(1.035) rotate(0.5deg); filter:blur(0); }}
+  100% {{ opacity:0.94; transform:scale(1) rotate(0); filter:drop-shadow(0 10px 20px rgba(214,177,111,0.18)); }}
+}}
+@keyframes richButtonSheen {{
+  0% {{ transform:translateX(-145%) skewX(-18deg); opacity:0; }}
+  28% {{ opacity:0.45; }}
+  100% {{ transform:translateX(185%) skewX(-18deg); opacity:0; }}
+}}
+.hero-title{{
+  animation:richRevealUp 0.64s cubic-bezier(0.22,1,0.36,1) 0.06s both;
+}}
+.hero-subtitle{{
+  animation:richRevealUp 0.58s cubic-bezier(0.16,1,0.3,1) 0.16s both;
+}}
+.partner-card{{
+  animation:richCardRise 0.68s cubic-bezier(0.22,1,0.36,1) 0.24s both;
+}}
+.partner-card .card-badge,
+.sb-card .card-badge{{
+  animation:richLogoReveal 0.78s cubic-bezier(0.34,1.56,0.64,1) 0.46s both;
+}}
+.digital-card-entry{{
+  animation:richCardRise 0.72s cubic-bezier(0.16,1,0.3,1) 0.34s both;
+}}
+.discovery-heading{{
+  animation:richRevealUp 0.62s cubic-bezier(0.22,1,0.36,1) 0.48s both;
+}}
+.entry-quiz-card,
+.featured-quiz{{
+  animation:richCardRise 0.72s cubic-bezier(0.16,1,0.3,1) 0.58s both;
+}}
+.digital-card-btn{{
+  position:relative;
+  overflow:hidden;
+  transition:transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}}
+.digital-card-btn.line-primary::after{{
+  content:"";
+  position:absolute;
+  top:-35%;
+  bottom:-35%;
+  left:0;
+  width:24%;
+  background:linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent);
+  animation:richButtonSheen 0.9s cubic-bezier(0.22,1,0.36,1) 1.05s both;
+  pointer-events:none;
+}}
+.digital-card-btn:hover{{
+  transform:translateY(-2px);
+}}
+.digital-card-btn:active{{
+  transform:translateY(0) scale(0.985);
+}}
+
+@media (prefers-reduced-motion:reduce){{
+  .hero-title,
+  .hero-subtitle,
+  .partner-card,
+  .partner-card .card-badge,
+  .sb-card .card-badge,
+  .digital-card-entry,
+  .discovery-heading,
+  .entry-quiz-card,
+  .featured-quiz,
+  .digital-card-btn.line-primary::after{{
+    animation:none !important;
+    transform:none !important;
+    filter:none !important;
+  }}
+  .digital-card-btn{{
+    transition:none !important;
+  }}
+}}
 
 /* Digital business card actions */
 .digital-card-entry{{
@@ -933,6 +1031,14 @@ div[data-baseweb="popover"] li{{ color:#fff !important; background:transparent !
     padding:10px 12px !important;
     margin:4px 0 8px 0 !important;
   }}
+  .partner-card:has(.card-badge){{
+    padding-right:72px !important;
+  }}
+  .card-badge{{
+    width:58px !important;
+    top:9px !important;
+    right:10px !important;
+  }}
   .digital-card-entry{{
     padding:13px !important;
     margin:5px 0 9px !important;
@@ -1059,7 +1165,7 @@ img_html = (
 )
 ref_html = f'<div class="sb-ref">ref：{sb_ref}</div>' if DEBUG and sb_ref else ""
 sb_badge_html = (
-    f'<img class="card-badge" src="{BADGE_URL}" alt="badge" onerror="this.style.display=\'none\';" />'
+    f'<img class="card-badge" src="{BADGE_URL}" alt="RICH TEAM" onerror="this.style.display=\'none\';" />'
     if BADGE_URL
     else ""
 )
@@ -1085,7 +1191,7 @@ def show_partner_card():
     ref_text = str(partner.get("ref", "")).strip()
 
     badge_html = (
-        f'<img class="card-badge" src="{BADGE_URL}" alt="badge" onerror="this.style.display=\'none\';" />'
+        f'<img class="card-badge" src="{BADGE_URL}" alt="RICH TEAM" onerror="this.style.display=\'none\';" />'
         if BADGE_URL
         else ""
     )
@@ -2694,12 +2800,12 @@ def render_result_share_pack(result_title: str, result_summary: str):
     )
     render_result_line_actions(pack["line"])
     st.markdown("## 📣 分享我的結果")
-    st.caption("其他社群版本與夥伴跟進文字可在下方切換。")
-    tabs = st.tabs(["LINE", "Instagram", "Facebook", "夥伴跟進"])
+    st.caption("其他社群版本可在下方切換。")
+    tabs = st.tabs(["LINE", "Instagram", "Facebook"])
     for tab, platform, label in zip(
         tabs,
-        ("line", "instagram", "facebook", "follow_up"),
-        ("複製 LINE 文字", "複製 IG 文字", "複製 FB 文字", "複製跟進文字"),
+        ("line", "instagram", "facebook"),
+        ("複製 LINE 文字", "複製 IG 文字", "複製 FB 文字"),
     ):
         with tab:
             st.code(pack[platform], language=None)

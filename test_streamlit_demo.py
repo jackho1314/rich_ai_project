@@ -59,6 +59,9 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertNotIn("自然的開場話題", markdown)
         self.assertIn("10 秒看見你的生命靈數", markdown)
         self.assertIn("想更深入了解自己，再進入 20 題人性探索", markdown)
+        self.assertIn('alt="RICH TEAM"', markdown)
+        self.assertIn("@keyframes richRevealUp", markdown)
+        self.assertIn("@media (prefers-reduced-motion:reduce)", markdown)
         captions = "\n".join(element.value for element in app.caption)
         self.assertNotIn("只有主動同意才會建立後續名單", captions)
         self.assertNotIn(
@@ -162,7 +165,7 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertNotIn("1991", code)
         self.assertEqual(
             [tab.label for tab in app.tabs],
-            ["LINE", "Instagram", "Facebook", "夥伴跟進"],
+            ["LINE", "Instagram", "Facebook"],
         )
         self.assertNotIn(
             "同意儲存結果並通知分享夥伴",
@@ -199,7 +202,7 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertIn("結果摘要", markdown)
         self.assertEqual(
             [tab.label for tab in app.tabs],
-            ["LINE", "Instagram", "Facebook", "夥伴跟進"],
+            ["LINE", "Instagram", "Facebook"],
         )
         self.assertNotIn(
             "同意儲存結果並通知分享夥伴",
@@ -229,7 +232,7 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertIn("健康結果摘要", markdown)
         self.assertEqual(
             [tab.label for tab in app.tabs],
-            ["LINE", "Instagram", "Facebook", "夥伴跟進"],
+            ["LINE", "Instagram", "Facebook"],
         )
 
 
