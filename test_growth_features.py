@@ -7,6 +7,7 @@ from growth_features import (
     build_campaign_share_pack,
     build_digital_card_url,
     build_event_row,
+    build_humanity_share_url,
     build_partner_share_pack,
     build_share_url,
     entry_copy,
@@ -66,6 +67,23 @@ class GrowthFeaturesTest(unittest.TestCase):
         self.assertEqual(context.forced_quiz, "birthday")
         url = build_share_url("https://example.com/", context, "birthday")
         self.assertIn("quiz=birthday", url)
+
+    def test_humanity_link_opens_question_one_without_exposing_birth_date(self):
+        context = AcquisitionContext.from_values(
+            ref_input="master",
+            source="line",
+            campaign="organic",
+            entry="friend",
+            forced_quiz="birthday",
+        )
+        url = build_humanity_share_url("https://example.com/", context, 3)
+
+        self.assertIn("quiz=birthday", url)
+        self.assertIn("stage=humanity", url)
+        self.assertIn("lp=3", url)
+        self.assertNotIn("birth_year", url)
+        self.assertNotIn("birth_month", url)
+        self.assertNotIn("birth_day", url)
 
     def test_digital_card_url_is_ready_for_printed_qr_tracking(self):
         url = build_digital_card_url("https://example.com/", "Master")

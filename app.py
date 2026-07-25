@@ -40,6 +40,7 @@ from growth_features import (
     build_campaign_share_pack,
     build_digital_card_url,
     build_event_row,
+    build_humanity_share_url,
     build_partner_share_pack,
     build_share_url,
     entry_copy,
@@ -158,6 +159,13 @@ DEMO_MODE = str(os.getenv("RICH_DEMO_MODE", "0")).strip().lower() in (
 )
 FUNNEL_TAG = str(get_qp("cl", "cl3")).strip()
 MODE = str(get_qp("mode", "A")).strip()
+HUMANITY_DEEP_LINK = str(get_qp("stage", "")).strip().lower() == "humanity"
+try:
+    HUMANITY_DEEP_LINK_LIFE_PATH = int(str(get_qp("lp", "0")).strip())
+except (TypeError, ValueError):
+    HUMANITY_DEEP_LINK_LIFE_PATH = 0
+if HUMANITY_DEEP_LINK_LIFE_PATH not in BIRTHDAY_CORES:
+    HUMANITY_DEEP_LINK_LIFE_PATH = 0
 APP_PUBLIC_URL = str(
     secret_value("APP_PUBLIC_URL", default=DEFAULT_APP_URL) or DEFAULT_APP_URL
 ).strip()
@@ -1347,6 +1355,23 @@ if "tracked_events" not in st.session_state:
     st.session_state.tracked_events = set()
 if "auto_notified_results" not in st.session_state:
     st.session_state.auto_notified_results = set()
+if "humanity_direct_entry" not in st.session_state:
+    st.session_state.humanity_direct_entry = False
+if "deep_link_initialized" not in st.session_state:
+    st.session_state.deep_link_initialized = True
+    if (
+        HUMANITY_DEEP_LINK
+        and HUMANITY_DEEP_LINK_LIFE_PATH
+        and ACQUISITION.forced_quiz == "birthday"
+    ):
+        st.session_state.page = "quiz"
+        st.session_state.quiz_id = "birthday"
+        st.session_state.step = 1
+        st.session_state.answers_map = {}
+        st.session_state.life_path = HUMANITY_DEEP_LINK_LIFE_PATH
+        st.session_state.birth_energy = HUMANITY_DEEP_LINK_LIFE_PATH
+        st.session_state.u_name = "匿名訪客"
+        st.session_state.humanity_direct_entry = True
 
 
 def track_event(
@@ -1408,6 +1433,7 @@ def reset_all(keep_profile: bool = True):
         key for key in st.session_state.tracked_events if key == "page_opened"
     }
     st.session_state.auto_notified_results = set()
+    st.session_state.humanity_direct_entry = False
     if not keep_profile:
         st.session_state.u_name = ""
         st.session_state.u_state = ""
@@ -2556,17 +2582,23 @@ def build_line_share_text_birthday(
             f"🔢 生命靈數：{report.get('life_path','')}號 "
             f"{report.get('core_emoji','')} {report.get('core_label','')}"
         ),
-        f"💎 天生強項：{report.get('birthday_label','')}",
-        f"👀 第一印象：{report.get('attitude_label','')}",
-        f"🐾 團隊互動風格：{report.get('animal_emoji','')} {report.get('animal_title','')}",
-        f"🔀 風格關係：{report.get('animal_balance_label','')}",
-        f"📊 五項分布：{trait_line}",
-        f"🏷️ 個人標籤：{'｜'.join(report.get('modifier_tags', []))}",
-        "—",
-        f"💬 {report.get('summary','')}",
-        "",
-        "💎 我的三個優勢",
     ]
+    if report.get("birthday_label"):
+        lines.append(f"💎 天生強項：{report.get('birthday_label','')}")
+    if report.get("attitude_label"):
+        lines.append(f"👀 第一印象：{report.get('attitude_label','')}")
+    lines.extend(
+        [
+            f"🐾 團隊互動風格：{report.get('animal_emoji','')} {report.get('animal_title','')}",
+            f"🔀 風格關係：{report.get('animal_balance_label','')}",
+            f"📊 五項分布：{trait_line}",
+            f"🏷️ 個人標籤：{'｜'.join(report.get('modifier_tags', []))}",
+            "—",
+            f"💬 {report.get('summary','')}",
+            "",
+            "💎 我的三個優勢",
+        ]
+    )
     lines.extend(f"• {strength}" for strength in report.get("strengths", [])[:3])
     lines.extend(
         [
@@ -3671,10 +3703,10 @@ def page_life_path_result():
         begin_humanity_quiz()
 
     p_name = str(partner.get("name", "")).strip() or "分享夥伴"
-    humanity_exploration_url = build_share_url(
+    humanity_exploration_url = build_humanity_share_url(
         APP_PUBLIC_URL,
         ACQUISITION,
-        "birthday",
+        report["life_path"],
     )
     st.markdown("---")
     st.markdown("## 🧾 我的生命靈數｜現在就能分享")
@@ -3763,7 +3795,11 @@ def page_quiz():
                     if step > 1:
                         st.session_state.step = step - 1
                     else:
-                        st.session_state.page = "life_path_result"
+                        st.session_state.page = (
+                            "intro"
+                            if st.session_state.humanity_direct_entry
+                            else "life_path_result"
+                        )
                     st.rerun()
 
             with c2:
@@ -4004,12 +4040,15 @@ def page_result():
             st.session_state.answers_map,
             life_path,
         )
-        life_report = build_life_path_report(
-            st.session_state.birth_year,
-            st.session_state.birth_month,
-            st.session_state.birth_day,
-            current_year=datetime.now().year,
-        )
+        try:
+            life_report = build_life_path_report(
+                st.session_state.birth_year,
+                st.session_state.birth_month,
+                st.session_state.birth_day,
+                current_year=datetime.now().year,
+            )
+        except (TypeError, ValueError):
+            life_report = {}
         for key in (
             "birthday_number",
             "birthday_label",
@@ -4023,7 +4062,8 @@ def page_result():
             "report_year",
             "cross_insight",
         ):
-            report[key] = life_report[key]
+            if key in life_report:
+                report[key] = life_report[key]
         track_event(
             "result_viewed",
             quiz_id="birthday",
@@ -4070,19 +4110,29 @@ def page_result():
         st.markdown(
             f"**內在動力：生命靈數 {report['life_path']} 號・{report['core_label']}**"
         )
-        st.markdown(
-            f"**天生強項：{report['birthday_label']}**"
-            f"｜{report['birthday_gift']}"
-        )
-        st.markdown(
-            f"**第一印象：{report['attitude_label']}**"
-        )
         st.write(report["summary"])
-        st.info(report["cross_insight"])
-        st.markdown(
-            f"**{report['report_year']} 個人主題：{report['personal_year_focus']}**"
-        )
-        st.caption("完整生日不會出現在事件追蹤、名單或分享文字；只使用不含原始日期的推導數字。")
+        if life_report:
+            st.markdown(
+                f"**天生強項：{report['birthday_label']}**"
+                f"｜{report['birthday_gift']}"
+            )
+            st.markdown(
+                f"**第一印象：{report['attitude_label']}**"
+            )
+            st.info(report["cross_insight"])
+            st.markdown(
+                f"**{report['report_year']} 個人主題："
+                f"{report['personal_year_focus']}**"
+            )
+            st.caption(
+                "完整生日不會出現在事件追蹤、名單或分享文字；"
+                "只使用不含原始日期的推導數字。"
+            )
+        else:
+            st.caption(
+                "此深連結只保留生命主數，不含完整生日；"
+                "團隊互動分析與五項分數仍會完整顯示。"
+            )
 
         st.markdown("#### 📊 五項連續向度")
         st.caption(

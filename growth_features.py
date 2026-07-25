@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from typing import Any, Dict, Mapping
-from urllib.parse import urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
 ENTRY_MODES = {"friend", "cold", "social"}
@@ -89,6 +89,36 @@ def build_share_url(base_url: str, context: AcquisitionContext, quiz_id: str) ->
         }
     )
     return urlunsplit((parts.scheme, parts.netloc, parts.path or "/", query, ""))
+
+
+def build_humanity_share_url(
+    base_url: str,
+    context: AcquisitionContext,
+    life_path: Any,
+) -> str:
+    """Build a privacy-safe deep link to question 1 of the 20-item layer."""
+    try:
+        number = int(str(life_path).strip())
+    except (TypeError, ValueError):
+        return ""
+    if number not in range(1, 10):
+        return ""
+
+    base = build_share_url(base_url, context, "birthday")
+    if not base:
+        return ""
+    parts = urlsplit(base)
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    query.update({"stage": "humanity", "lp": str(number)})
+    return urlunsplit(
+        (
+            parts.scheme,
+            parts.netloc,
+            parts.path or "/",
+            urlencode(query),
+            "",
+        )
+    )
 
 
 def build_digital_card_url(base_url: str, partner_ref: str) -> str:

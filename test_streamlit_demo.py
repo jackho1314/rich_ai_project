@@ -119,6 +119,8 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
             "main/life-number-6.jpg",
             result_code,
         )
+        self.assertIn("stage=humanity", result_code)
+        self.assertIn("lp=6", result_code)
         self.assertNotIn("life-number-5.jpg", result_code)
         self.assertEqual(
             app.button(key="start_humanity_after_copy").label,
@@ -138,6 +140,46 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertEqual(app.session_state["page"], "quiz")
         self.assertEqual(app.session_state["step"], 1)
         self.assertEqual(app.session_state["answers_map"], {})
+
+    def test_humanity_deep_link_opens_question_one_directly(self) -> None:
+        app = make_app(quiz="birthday")
+        app.query_params["stage"] = "humanity"
+        app.query_params["lp"] = "3"
+        app.run()
+
+        self.assertEqual(len(app.exception), 0)
+        self.assertEqual(app.session_state["page"], "quiz")
+        self.assertEqual(app.session_state["quiz_id"], "birthday")
+        self.assertEqual(app.session_state["step"], 1)
+        self.assertEqual(app.session_state["life_path"], 3)
+        self.assertTrue(app.session_state["humanity_direct_entry"])
+        markdown = "\n".join(element.value for element in app.markdown)
+        self.assertIn("第 1 題 / 共 20 題", markdown)
+        self.assertIn("在聚會或團體中，我常能帶動現場氣氛", markdown)
+        self.assertNotIn("輸入完整生日", markdown)
+
+    def test_direct_humanity_result_works_without_full_birth_date(self) -> None:
+        app = make_app(quiz="birthday")
+        app.session_state["page"] = "result"
+        app.session_state["quiz_id"] = "birthday"
+        app.session_state["u_name"] = "匿名訪客"
+        app.session_state["life_path"] = 3
+        app.session_state["birth_energy"] = 3
+        app.session_state["birth_year"] = 0
+        app.session_state["birth_month"] = 0
+        app.session_state["birth_day"] = 0
+        app.session_state["humanity_direct_entry"] = True
+        app.session_state["answers_map"] = {index: 3 for index in range(1, 21)}
+        app.run()
+
+        self.assertEqual(len(app.exception), 0)
+        self.assertEqual(app.session_state["page"], "result")
+        markdown = "\n".join(element.value for element in app.markdown)
+        captions = "\n".join(element.value for element in app.caption)
+        self.assertIn("生命靈數 3 號", markdown)
+        self.assertIn("此深連結只保留生命主數", captions)
+        self.assertIn("五項連續向度", markdown)
+        self.assertNotIn("天生強項：", markdown)
 
     def test_three_entry_messages_render(self) -> None:
         expectations = {
