@@ -52,6 +52,7 @@ from humanity_profile import (
     calculate_life_path,
     compute_humanity_report,
 )
+from life_number_assets import life_number_image_share_block
 
 # plotly（雷達圖）可選
 try:
@@ -2506,6 +2507,9 @@ def build_line_share_text_life_path(
         f"💬 {report.get('cross_insight', '')}",
         f"✅ 今年可以先做：{report.get('personal_year_action', '')}",
     ]
+    image_share_block = life_number_image_share_block(report.get("life_path"))
+    if image_share_block:
+        lines.extend(["—", image_share_block])
     if exploration_url:
         lines.extend(
             [
@@ -2975,7 +2979,12 @@ def render_campaign_share_pack():
         render_copy_box(card_url, "複製數位名片連結", "digital_card_url")
 
 
-def render_result_share_pack(result_title: str, result_summary: str):
+def render_result_share_pack(
+    result_title: str,
+    result_summary: str,
+    *,
+    line_suffix: str = "",
+):
     quiz_id = st.session_state.quiz_id
     label = (
         "20 題團隊互動探索"
@@ -2991,6 +3000,8 @@ def render_result_share_pack(result_title: str, result_summary: str):
         result_summary=result_summary,
         share_url=share_url,
     )
+    if line_suffix:
+        pack["line"] = f"{pack['line']}\n\n{line_suffix}"
     track_event(
         "share_pack_viewed",
         quiz_id=quiz_id,
@@ -3691,6 +3702,7 @@ def page_life_path_result():
     render_result_share_pack(
         f"{report['life_path']}號{report['core_label']}",
         report["summary"],
+        line_suffix=life_number_image_share_block(report["life_path"]),
     )
 
     if st.button("重新輸入生日", key="restart_life_path"):

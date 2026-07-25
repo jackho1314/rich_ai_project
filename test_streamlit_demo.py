@@ -113,6 +113,13 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertIn("想進一步了解自己", result_code)
         self.assertIn("20 題團隊互動探索", result_code)
         self.assertIn("https://youtu.be/TJYy5d2c6-M", result_code)
+        self.assertIn("我的 6 號人專屬圖卡", result_code)
+        self.assertIn(
+            "https://raw.githubusercontent.com/jackho1314/rich_ai_project/"
+            "main/life-number-6.jpg",
+            result_code,
+        )
+        self.assertNotIn("life-number-5.jpg", result_code)
         self.assertEqual(
             app.button(key="start_humanity_after_copy").label,
             "🚀 接著做 20 題團隊互動探索",
