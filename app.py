@@ -160,6 +160,7 @@ MODE = str(get_qp("mode", "A")).strip()
 APP_PUBLIC_URL = str(
     secret_value("APP_PUBLIC_URL", default=DEFAULT_APP_URL) or DEFAULT_APP_URL
 ).strip()
+SELF_DISCOVERY_VIDEO_URL = "https://youtu.be/TJYy5d2c6-M"
 EVENT_TRACKING_ENABLED = (not DEMO_MODE) and str(
     secret_value("ENABLE_EVENT_TRACKING", default="false")
 ).strip().lower() in ("1", "true", "yes", "y")
@@ -2483,31 +2484,51 @@ def build_line_share_text_life_path(
     client_name: str,
     partner_name: str,
     report: Dict[str, Any],
+    exploration_url: str = "",
+    video_url: str = SELF_DISCOVERY_VIDEO_URL,
 ) -> str:
     """Build a useful first-stage share without exposing the raw birth date."""
     display_name = client_name if client_name != "匿名訪客" else "我"
-    return "\n".join(
+    lines = [
+        "🔮【我的完整生命靈數摘要】",
+        f"👤 {display_name}",
+        (
+            f"✨ 生命路徑：{report.get('life_path', '')}號 "
+            f"{report.get('core_emoji', '')}{report.get('core_label', '')}"
+        ),
+        f"💎 天生強項：{report.get('birthday_label', '')}",
+        f"👀 第一印象：{report.get('attitude_label', '')}",
+        (
+            f"🗓️ {report.get('report_year', '')} 主題："
+            f"{report.get('personal_year_focus', '')}"
+        ),
+        "—",
+        f"💬 {report.get('cross_insight', '')}",
+        f"✅ 今年可以先做：{report.get('personal_year_action', '')}",
+    ]
+    if exploration_url:
+        lines.extend(
+            [
+                "—",
+                "🌱 想進一步了解自己？可以接著完成「20 題團隊互動探索」：",
+                exploration_url,
+            ]
+        )
+    if video_url:
+        lines.extend(
+            [
+                "🎬 延伸觀看｜用另一個角度認識自己：",
+                video_url,
+            ]
+        )
+    lines.extend(
         [
-            "🔮【我的完整生命靈數摘要】",
-            f"👤 {display_name}",
-            (
-                f"✨ 生命路徑：{report.get('life_path', '')}號 "
-                f"{report.get('core_emoji', '')}{report.get('core_label', '')}"
-            ),
-            f"💎 天生強項：{report.get('birthday_label', '')}",
-            f"👀 第一印象：{report.get('attitude_label', '')}",
-            (
-                f"🗓️ {report.get('report_year', '')} 主題："
-                f"{report.get('personal_year_focus', '')}"
-            ),
-            "—",
-            f"💬 {report.get('cross_insight', '')}",
-            f"✅ 今年可以先做：{report.get('personal_year_action', '')}",
             "—",
             f"這份探索由 {partner_name} 分享；完整結果直接看，不用先加好友。",
             "生命靈數屬於自我探索工具，不是科學心理測驗或診斷。",
         ]
     )
+    return "\n".join(lines)
 
 
 def build_line_share_text_birthday(
@@ -2517,6 +2538,7 @@ def build_line_share_text_birthday(
     lead_id: str,
     partner_name: str,
     report: Dict[str, Any],
+    video_url: str = SELF_DISCOVERY_VIDEO_URL,
 ) -> str:
     trait_line = "｜".join(
         f"{label}{score}"
@@ -2553,6 +2575,14 @@ def build_line_share_text_birthday(
     )
     if lead_id:
         lines.append(f"🆔 lead_id：{lead_id}")
+    if video_url:
+        lines.extend(
+            [
+                "—",
+                "🎬 延伸觀看｜再用另一個角度了解自己的互動方式：",
+                video_url,
+            ]
+        )
     lines.extend(
         [
             "—",
@@ -3630,15 +3660,34 @@ def page_life_path_result():
         begin_humanity_quiz()
 
     p_name = str(partner.get("name", "")).strip() or "分享夥伴"
+    humanity_exploration_url = build_share_url(
+        APP_PUBLIC_URL,
+        ACQUISITION,
+        "birthday",
+    )
     st.markdown("---")
     st.markdown("## 🧾 我的生命靈數｜現在就能分享")
     share_text = build_line_share_text_life_path(
         client_name=st.session_state.u_name,
         partner_name=p_name,
         report=report,
+        exploration_url=humanity_exploration_url,
     )
     st.code(share_text, language=None)
     render_copy_box(share_text, "複製我的生命靈數", "life_path_summary")
+    st.markdown("### 🌱 想進一步了解自己？")
+    st.caption("接著用 20 題看見自己的溝通、合作、行動與適應傾向。")
+    if st.button(
+        "🚀 接著做 20 題團隊互動探索",
+        key="start_humanity_after_copy",
+        use_container_width=True,
+    ):
+        begin_humanity_quiz()
+    st.link_button(
+        "▶️ 延伸觀看｜用另一個角度認識自己",
+        SELF_DISCOVERY_VIDEO_URL,
+        use_container_width=True,
+    )
     render_result_share_pack(
         f"{report['life_path']}號{report['core_label']}",
         report["summary"],
@@ -4113,6 +4162,13 @@ def page_result():
         )
         st.code(share_text, language=None)
         render_copy_box(share_text, "複製我的探索結果", "birthday_summary")
+        st.markdown("### 🎬 延伸了解自己")
+        st.caption("看完探索結果後，也可以透過這支影片換一個角度整理自己。")
+        st.link_button(
+            "▶️ 觀看延伸影片",
+            SELF_DISCOVERY_VIDEO_URL,
+            use_container_width=True,
+        )
         render_result_share_pack(
             str(report["combined_title"]),
             str(report["summary"]),

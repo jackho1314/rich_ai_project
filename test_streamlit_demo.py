@@ -110,6 +110,13 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertNotIn("外在態度｜5 號", result_markdown)
         self.assertIn("今年主題", result_markdown)
         self.assertIn("不用做 20 題", result_captions)
+        self.assertIn("想進一步了解自己", result_code)
+        self.assertIn("20 題團隊互動探索", result_code)
+        self.assertIn("https://youtu.be/TJYy5d2c6-M", result_code)
+        self.assertEqual(
+            app.button(key="start_humanity_after_copy").label,
+            "🚀 接著做 20 題團隊互動探索",
+        )
         self.assertNotIn("1990", result_markdown)
         self.assertNotIn("1990", result_code)
         self.assertTrue(
@@ -187,6 +194,8 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertIn("外向互動", markdown)
         self.assertIn("完整解析", markdown)
         self.assertIn("我的探索結果", markdown)
+        self.assertIn("延伸了解自己", markdown)
+        self.assertIn("https://youtu.be/TJYy5d2c6-M", code)
         self.assertIn("LINE 傳給朋友", markdown)
         self.assertIn("＋ 加入侯閔議的 LINE", markdown)
         self.assertIn("https://line.me/R/share?text=", markdown)
