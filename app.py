@@ -2593,6 +2593,13 @@ def build_line_share_text_birthday(
             f"🔀 風格關係：{report.get('animal_balance_label','')}",
             f"📊 五項分布：{trait_line}",
             f"🏷️ 個人標籤：{'｜'.join(report.get('modifier_tags', []))}",
+        ]
+    )
+    image_share_block = life_number_image_share_block(report.get("life_path"))
+    if image_share_block:
+        lines.extend(["—", image_share_block])
+    lines.extend(
+        [
             "—",
             f"💬 {report.get('summary','')}",
             "",
@@ -4234,6 +4241,7 @@ def page_result():
         render_result_share_pack(
             str(report["combined_title"]),
             str(report["summary"]),
+            line_suffix=life_number_image_share_block(report["life_path"]),
         )
 
     elif is_wealth:

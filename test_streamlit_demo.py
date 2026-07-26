@@ -180,6 +180,8 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertIn("此深連結只保留生命主數", captions)
         self.assertIn("五項連續向度", markdown)
         self.assertNotIn("天生強項：", markdown)
+        result_code = "\n".join(element.value for element in app.code)
+        self.assertIn("life-number-3.jpg", result_code)
 
     def test_three_entry_messages_render(self) -> None:
         expectations = {
