@@ -180,8 +180,16 @@ class StreamlitDemoSmokeTest(unittest.TestCase):
         self.assertIn("此深連結只保留生命主數", captions)
         self.assertIn("五項連續向度", markdown)
         self.assertNotIn("天生強項：", markdown)
-        result_code = "\n".join(element.value for element in app.code)
+        code_blocks = [element.value for element in app.code]
+        result_code = "\n".join(code_blocks)
         self.assertIn("life-number-3.jpg", result_code)
+        for platform_marker in ("我剛完成", "#自我探索", "原來我在"):
+            with self.subTest(platform_marker=platform_marker):
+                platform_codes = [
+                    code for code in code_blocks if platform_marker in code
+                ]
+                self.assertEqual(len(platform_codes), 1)
+                self.assertIn("life-number-3.jpg", platform_codes[0])
 
     def test_three_entry_messages_render(self) -> None:
         expectations = {

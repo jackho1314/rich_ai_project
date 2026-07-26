@@ -3022,7 +3022,7 @@ def render_result_share_pack(
     result_title: str,
     result_summary: str,
     *,
-    line_suffix: str = "",
+    social_suffix: str = "",
 ):
     quiz_id = st.session_state.quiz_id
     label = (
@@ -3039,8 +3039,9 @@ def render_result_share_pack(
         result_summary=result_summary,
         share_url=share_url,
     )
-    if line_suffix:
-        pack["line"] = f"{pack['line']}\n\n{line_suffix}"
+    if social_suffix:
+        for platform in ("line", "instagram", "facebook"):
+            pack[platform] = f"{pack[platform]}\n\n{social_suffix}"
     track_event(
         "share_pack_viewed",
         quiz_id=quiz_id,
@@ -3741,7 +3742,7 @@ def page_life_path_result():
     render_result_share_pack(
         f"{report['life_path']}號{report['core_label']}",
         report["summary"],
-        line_suffix=life_number_image_share_block(report["life_path"]),
+        social_suffix=life_number_image_share_block(report["life_path"]),
     )
 
     if st.button("重新輸入生日", key="restart_life_path"):
@@ -4241,7 +4242,7 @@ def page_result():
         render_result_share_pack(
             str(report["combined_title"]),
             str(report["summary"]),
-            line_suffix=life_number_image_share_block(report["life_path"]),
+            social_suffix=life_number_image_share_block(report["life_path"]),
         )
 
     elif is_wealth:
